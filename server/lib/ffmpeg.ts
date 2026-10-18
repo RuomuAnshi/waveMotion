@@ -98,7 +98,17 @@ export interface FfprobeVerifyResult {
 }
 
 /** 用 ffprobe 核对导出成片规格 */
-export function verifyRender(filePath: string): FfprobeVerifyResult {
+interface VerifyExpectation {
+  /** 期望包含音轨（AAC） */
+  expectAudio?: boolean;
+  /** 期望不含音轨 */
+  expectNoAudio?: boolean;
+  /** 期望时长（秒），超过该容差则报错 */
+  expectedDurationSec?: number;
+  durationToleranceSec?: number;
+}
+
+export function verifyRender(filePath: string, expect: VerifyExpectation = {}): FfprobeVerifyResult {
   const bin = resolveFfprobeBin();
   const args = ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", filePath];
   const result = spawnSync(bin, args, { encoding: "utf-8", maxBuffer: 16 * 1024 * 1024 });
@@ -149,6 +159,24 @@ export function verifyRender(filePath: string): FfprobeVerifyResult {
   else {
     if (video.codecName !== "h264") problems.push(`视频编码为 ${video.codecName}，期望 h264`);
     if (video.pixFmt && video.pixFmt !== "yuv420p") problems.push(`像素格式为 ${video.pixFmt}，期望 yuv420p`);
+  }
+
+  if (expect.expectAudio) {
+    if (!audio) problems.push("缺少音轨，期望保留原音频（AAC）");
+    else if (audio.codecName !== "aac") problems.push(`音频编码为 ${audio.codecName}，期望 aac`);
+  }
+  if (expect.expectNoAudio && audio) {
+    problems.push(`期望仅画面，但成片包含音轨（${audio.codecName}）`);
+  }
+
+  const duration = formatDuration || Number(video?.durationSec ?? 0);
+  if (expect.expectedDurationSec !== undefined && expect.expectedDurationSec > 0) {
+    const tol = expect.durationToleranceSec ?? 0.1;
+    if (Math.abs(duration - expect.expectedDurationSec) > tol) {
+      problems.push(
+        `时长 ${duration.toFixed(3)}s 与期望 ${expect.expectedDurationSec.toFixed(3)}s 相差超过 ${tol}s`,
+      );
+    }
   }
   return {
     video,

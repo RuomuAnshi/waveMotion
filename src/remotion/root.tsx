@@ -1,5 +1,5 @@
 import React from "react";
-import { AbsoluteFill, Composition, registerRoot, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Composition, registerRoot, useCurrentFrame, useVideoConfig } from "remotion";
 import type { WaveMotionProps } from "../shared/renderPayload.ts";
 import type { VisualConfig } from "../shared/types.ts";
 import { SceneEngine, type Scene } from "../engine/frame.ts";
@@ -19,7 +19,7 @@ function getEngine(visual: VisualConfig): SceneEngine {
   return e;
 }
 
-export const WaveMotionBackground: React.FC<WaveMotionProps> = ({ analysis, visual }) => {
+export const WaveMotionBackground: React.FC<WaveMotionProps> = ({ analysis, visual, audioSrc }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
   const engine = getEngine(visual);
@@ -28,6 +28,8 @@ export const WaveMotionBackground: React.FC<WaveMotionProps> = ({ analysis, visu
   return (
     <AbsoluteFill style={{ backgroundColor: scene.palette.background }}>
       <TemplateRenderer scene={scene} />
+      {/* 预览时播放原音频；导出不传 audioSrc，音轨由后台单独封装 */}
+      {audioSrc ? <Audio src={audioSrc} /> : null}
     </AbsoluteFill>
   );
 };

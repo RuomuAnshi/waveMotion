@@ -4,7 +4,8 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition, ensureBrowser, makeCancelSignal } from "@remotion/renderer";
 import type { RenderJob, AudioAnalysis } from "../../src/shared/types.ts";
 import { RENDERS_DIR, ensureDir, uniqueFileName } from "./paths.ts";
-import { verifyRender } from "./ffmpeg.ts";
+import { verifyRender, runFfmpeg } from "./ffmpeg.ts";
+import { TMP_DIR } from "./paths.ts";
 import { ROOT_DIR } from "./paths.ts";
 
 const ENTRY_POINT = path.join(ROOT_DIR, "src/remotion/root.tsx");
@@ -105,33 +106,69 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
   const { cancel, cancelSignal } = makeCancelSignal();
   onCancel(() => cancel());
 
+  // 视频轨道单独渲染（不含音轨）。画面完全由分析数据驱动，
+  // 音轨随后用 ffmpeg 从原音频直接封装，保证不重编码、时长精确。
+  const videoOnlyPath = spec.includeAudio
+    ? path.join(TMP_DIR, `${path.parse(fileName).name}-video.mp4`)
+    : outputPath;
+  ensureDir(TMP_DIR);
+
   await renderMedia({
     composition,
     serveUrl,
     inputProps,
     codec: "h264",
-    outputLocation: outputPath,
+    outputLocation: videoOnlyPath,
     browserExecutable,
     pixelFormat: "yuv420p",
     // 指定 bt709 才会输出有限范围 (tv) 的 yuv420p；默认会得到 yuvj420p (full range)
     colorSpace: "bt709",
     imageFormat: "png",
     crf: 18,
-    audioCodec: spec.includeAudio ? "aac" : null,
-    muted: !spec.includeAudio,
-    enforceAudioTrack: false,
+    muted: true,
     chromiumOptions: { gl: "angle" },
     concurrency: null,
     cancelSignal,
     onProgress: ({ progress }) => {
-      onProgress(0.15 + progress * 0.85);
+      onProgress(0.15 + progress * 0.82);
     },
   });
 
   if (isCancelled()) return undefined;
-  if (!fs.existsSync(outputPath)) throw new Error("渲染结束但未生成输出文件");
+  if (!fs.existsSync(videoOnlyPath)) throw new Error("渲染结束但未生成输出文件");
 
-  const verify = verifyRender(outputPath);
+  if (spec.includeAudio) {
+    onProgress(0.975);
+    // 音轨时长对齐到成片：音频略短时补静音，避免播放器在末尾提前结束
+    const targetSec = snapshot.totalFrames / spec.output.fps;
+    const mux = await runFfmpeg([
+      "-y",
+      "-i", videoOnlyPath,
+      "-i", snapshot.audioPath,
+      "-map", "0:v:0",
+      "-map", "1:a:0",
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-af", `apad=whole_dur=${targetSec.toFixed(4)}`,
+      "-t", targetSec.toFixed(4),
+      "-movflags", "+faststart",
+      outputPath,
+    ]);
+    if (mux.code !== 0) {
+      throw new Error(`封装音轨失败：${mux.stderr.trim().split("\n").slice(-1)[0] ?? "未知错误"}`);
+    }
+    fs.rmSync(videoOnlyPath, { force: true });
+    if (isCancelled()) return undefined;
+  }
+
+  const expectedDurationSec = snapshot.totalFrames / spec.output.fps;
+  const verify = verifyRender(outputPath, {
+    expectAudio: spec.includeAudio,
+    expectNoAudio: !spec.includeAudio,
+    expectedDurationSec,
+    durationToleranceSec: 1 / spec.output.fps + 0.02,
+  });
   if (!verify.ok) {
     // 规格不符视为失败，但保留文件供排查
     throw new Error(`成片校验未通过：${verify.problems.join("；")}`);

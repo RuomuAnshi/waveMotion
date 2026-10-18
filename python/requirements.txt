@@ -1,0 +1,6 @@
+# WaveMotion 离线音频分析依赖
+# 安装：npm run setup:python（会创建 .venv 并安装这些包）
+librosa==1.0.0
+numpy==2.5.4
+scipy==1.18.1
+soundfile==0.14.0

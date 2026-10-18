@@ -54,6 +54,8 @@ export interface AudioAnalysis {
   rhythm: {
     /** 0..1，拍点间隔越稳定越接近 1 */
     stability: number;
+    /** 拍点重音显著性 0..1：低值说明拍点可能只是噪声伪峰 */
+    beatSalience?: number;
     /** 每个拍点的强度 */
     beatStrengths?: number[];
     /** 0..1，节拍检测置信度 */

@@ -7,6 +7,8 @@ import { resolveOutputSpec } from "../../shared/types.ts";
 
 interface PreviewStageProps {
   analysis: AudioAnalysis | null;
+  /** 音频媒体地址，用于预览时播放原音；导出时不会传入。 */
+  audioSrc?: string | null;
   visual: VisualConfig;
   output: OutputConfig;
   durationSec: number;
@@ -23,6 +25,7 @@ interface PreviewStageProps {
  */
 export const PreviewStage: React.FC<PreviewStageProps> = ({
   analysis,
+  audioSrc,
   visual,
   output,
   durationSec,
@@ -43,8 +46,9 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
       analysis: analysis ?? EMPTY_ANALYSIS,
       visual,
       output: { width: spec.width, height: spec.height, fps: spec.fps, totalFrames },
+      audioSrc: audioSrc ?? undefined,
     }),
-    [analysis, visual, spec.width, spec.height, spec.fps, totalFrames],
+    [analysis, audioSrc, visual, spec.width, spec.height, spec.fps, totalFrames],
   );
 
   // 按容器可用空间等比计算播放器尺寸（letterbox，不裁切、不变形）

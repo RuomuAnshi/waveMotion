@@ -68,7 +68,6 @@ export const App: React.FC = () => {
   const [playing, setPlaying] = useState(false);
 
   const playerRef = useRef<PlayerRef | null>(null);
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
     const id = Date.now() + Math.random();
@@ -168,17 +167,6 @@ export const App: React.FC = () => {
     return () => window.clearInterval(id);
   }, [activeExists]);
 
-  // ---- 音频播放同步 ----
-  const syncAudio = useCallback(
-    (targetPlaying: boolean) => {
-      const el = audioElRef.current;
-      if (!el) return;
-      if (targetPlaying) void el.play().catch(() => undefined);
-      else el.pause();
-    },
-    [],
-  );
-
   const handleToggle = useCallback(() => {
     playerRef.current?.toggle();
   }, []);
@@ -187,16 +175,7 @@ export const App: React.FC = () => {
     const clamped = Math.max(0, Math.min(totalFrames - 1, Math.round(nextFrame)));
     setSeekRequest(clamped);
     setFrame(clamped);
-    const el = audioElRef.current;
-    if (el) el.currentTime = clamped / spec.fps;
-  }, [totalFrames, spec.fps]);
-
-  // Player 播放状态 → 音频元素
-  useEffect(() => {
-    syncAudio(playing);
-    // 只在 playing 变化时同步，frame 变化不反复 seek
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing]);
+  }, [totalFrames]);
 
   // 循环区间
   useEffect(() => {
@@ -204,8 +183,6 @@ export const App: React.FC = () => {
     if (frame >= loopRange.end) {
       setSeekRequest(loopRange.start);
       setFrame(loopRange.start);
-      const el = audioElRef.current;
-      if (el) el.currentTime = loopRange.start / spec.fps;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frame, loopRange, playing]);
@@ -484,6 +461,7 @@ export const App: React.FC = () => {
           <div className="stage-preview">
             <PreviewStage
               analysis={analysis}
+              audioSrc={audioUrl}
               visual={visual}
               output={output}
               durationSec={durationSec}
@@ -593,16 +571,6 @@ export const App: React.FC = () => {
           />
         </aside>
       </div>
-
-      {audioUrl && (
-        <audio
-          ref={audioElRef}
-          src={audioUrl}
-          preload="auto"
-          onEnded={() => playerRef.current?.pause()}
-          style={{ display: "none" }}
-        />
-      )}
 
       <div className="toast-stack">
         {toasts.map((t) => (

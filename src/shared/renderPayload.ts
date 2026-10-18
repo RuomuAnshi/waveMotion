@@ -16,6 +16,12 @@ export type WaveMotionProps = {
     /** 成片总帧数（已按音频时长向上对齐） */
     totalFrames: number;
   };
+  /**
+   * 预览播放用的音频地址（仅预览传入）。
+   * 导出时故意不传：成片音轨由后台用 ffmpeg 直接封装原音频，
+   * 避免重新编码带来的时长漂移与额外损耗。
+   */
+  audioSrc?: string;
   /** 是否显示节拍提示音（仅预览，成片不含） */
   beatHint?: boolean;
   /** Remotion 需要 props 满足 Record<string, unknown> */

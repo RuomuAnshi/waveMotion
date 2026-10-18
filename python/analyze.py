@@ -176,6 +176,55 @@ def refine_tempo_by_regression(beats, tempo_val):
     return refined, float(intercept % slope)
 
 
+def estimate_beat_salience(onset_env, times, beats, bpm):
+    """拍点重音显著性 0..1。
+
+    稳定性只看拍点间隔是否均匀，但纯噪声/氛围音也能产生"均匀"的伪拍点网格
+    （librosa 的 beat_track 总会吐出某个 tempo 的规则网格）。真正有节拍的
+    音频，拍点处的起音强度应明显高于拍点之间的反拍位置。实测比值：
+    真实节拍 2.4~26，无节拍噪声约 1.5。这里用该比值衡量显著性。
+    """
+    import numpy as np
+
+    oe = np.asarray(onset_env, dtype=np.float64)
+    ts = np.asarray(times, dtype=np.float64)
+    if oe.size < 16 or len(beats) < 4 or ts.size != oe.size or bpm <= 0:
+        return 0.0
+    peak = float(np.percentile(oe, 99))
+    if peak <= 1e-9:
+        return 0.0
+    oe_n = oe / peak
+
+    def frame_at(sec):
+        return int(np.argmin(np.abs(ts - sec)))
+
+    on_vals = []
+    off_vals = []
+    intervals = np.diff(np.asarray(beats, dtype=np.float64))
+    med = float(np.median(intervals)) if intervals.size else 60.0 / bpm
+    if med <= 1e-6:
+        med = 60.0 / bpm
+    for b in beats:
+        idx = frame_at(b)
+        if idx < 1 or idx >= oe_n.size - 1:
+            continue
+        on_vals.append(float(np.max(oe_n[max(0, idx - 1):idx + 2])))
+        for k in (0.25, 0.5, 0.75):
+            j = frame_at(b + med * k)
+            if 1 <= j < oe_n.size - 1:
+                off_vals.append(float(np.max(oe_n[j - 1:j + 2])))
+    if len(on_vals) < 3 or len(off_vals) < 3:
+        return 0.0
+    on_mean = float(np.mean(on_vals))
+    off_mean = float(np.mean(off_vals))
+    ratio = on_mean / max(off_mean, 1e-6)
+    # ratio 1.5（噪声）-> 0；ratio 2.2 起快速上升到 1
+    contrast = clamp((ratio - 1.55) / 0.9)
+    # 拍点自身强度不足时也算低
+    level = clamp((on_mean - 0.12) / 0.5)
+    return float(clamp(contrast * 0.75 + level * 0.25))
+
+
 def estimate_beat_strength(onset_env, onset_times, beats):
     """给每个拍点一个 0..1 的强度，用于幅度驱动。"""
     import numpy as np
@@ -357,7 +406,12 @@ def main() -> int:
     onset_times = [float(t) for t in librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop) if 0.0 <= float(t) <= duration]
 
     beat_strengths = estimate_beat_strength(onset_env, times, beats)
-    stability, confidence = estimate_stability(beats)
+    stability_raw, _ = estimate_stability(beats)
+    beat_salience = estimate_beat_salience(onset_env, times, beats, tempo_val)
+    # 综合置信度：间隔均匀性 * 拍点显著性。纯噪声的伪拍点虽然间隔均匀，
+    # 但显著性低，置信度因此被压低。
+    confidence = float(stability_raw * (0.35 + 0.65 * beat_salience))
+    stability = stability_raw
 
     peak_db = float(np.max(rms_db)) if rms_db.size else -120.0
     mean_db = float(np.mean(rms_db)) if rms_db.size else -120.0
@@ -378,8 +432,17 @@ def main() -> int:
         warnings_list.append("检测到的拍点过少，建议手动输入 BPM")
     if stability < 0.55:
         warnings_list.append("节奏稳定性较低，建议在节奏校正中手动设定 BPM")
+    elif confidence < 0.5 and len(beats) >= 4:
+        warnings_list.append("节拍重音不明显，检测到的拍点可能不准，建议手动校正 BPM")
 
-    needs_correction = bool(len(beats) < 4 or stability < 0.55 or tempo_val <= 0 or tempo_val < 50 or tempo_val > 210)
+    needs_correction = bool(
+        len(beats) < 4
+        or stability < 0.55
+        or confidence < 0.5
+        or tempo_val <= 0
+        or tempo_val < 50
+        or tempo_val > 210
+    )
     if needs_correction:
         hint = "节奏检测不够可靠，建议使用手动 BPM 校正"
     else:
@@ -416,6 +479,7 @@ def main() -> int:
         },
         "rhythm": {
             "stability": round(stability, 4),
+            "beatSalience": round(beat_salience, 4),
             "confidence": round(confidence, 4),
             "needsCorrection": needs_correction,
             "hint": hint,
