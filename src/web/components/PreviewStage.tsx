@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { WaveMotionBackground } from "../../remotion/root.tsx";
 import { EMPTY_ANALYSIS } from "../../remotion/emptyAnalysis.ts";
@@ -40,6 +40,13 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
 
   const hostRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ width: number; height: number } | null>(null);
+  const [player, setPlayer] = useState<PlayerRef | null>(null);
+  // The Player mounts after asynchronous analysis and container measurement.
+  // A ref object's identity never changes when current becomes non-null.
+  const attachPlayer = useCallback((instance: PlayerRef | null) => {
+    playerRef.current = instance;
+    setPlayer(instance);
+  }, [playerRef]);
 
   const inputProps = useMemo(
     () => ({
@@ -75,7 +82,6 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
   }, [spec.width, spec.height]);
 
   useEffect(() => {
-    const player = playerRef.current;
     if (!player) return;
     const handleFrame = (e: { detail: { frame: number } }) => onFrame(e.detail.frame);
     const handlePlay = () => onPlayingChange(true);
@@ -83,12 +89,14 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
     player.addEventListener("frameupdate", handleFrame as never);
     player.addEventListener("play", handlePlay);
     player.addEventListener("pause", handlePause);
+    player.addEventListener("ended", handlePause);
     return () => {
       player.removeEventListener("frameupdate", handleFrame as never);
       player.removeEventListener("play", handlePlay);
       player.removeEventListener("pause", handlePause);
+      player.removeEventListener("ended", handlePause);
     };
-  }, [playerRef, onFrame, onPlayingChange]);
+  }, [player, onFrame, onPlayingChange]);
 
   useEffect(() => {
     if (seekRequest === null) return;
@@ -111,7 +119,7 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
             style={{ width: box.width, height: box.height }}
           >
             <Player
-              ref={playerRef}
+              ref={attachPlayer}
               component={WaveMotionBackground}
               inputProps={inputProps}
               durationInFrames={totalFrames}

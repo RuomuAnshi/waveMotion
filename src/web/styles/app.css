@@ -333,3 +333,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
   .app-body { grid-template-columns: 232px minmax(0, 1fr) 272px; }
   .palette-grid { grid-template-columns: repeat(3, 1fr); }
 }
+@media (max-width: 960px) {
+  .app-header { height: auto; min-height: 56px; padding: 10px 14px; gap: 10px; flex-wrap: wrap; }
+  .app-body { display: flex; flex-direction: column; overflow-y: auto; }
+  .stage { order: -1; flex: 0 0 auto; overflow: visible; }
+  .stage-preview { flex: 0 0 auto; height: clamp(220px, 58vw, 460px); padding: 14px; }
+  .transport { flex-wrap: wrap; }
+  .timeline-legend { flex-wrap: wrap; }
+  .sidebar-left, .sidebar-right { flex: 0 0 auto; overflow: visible; border: 0; }
+  .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

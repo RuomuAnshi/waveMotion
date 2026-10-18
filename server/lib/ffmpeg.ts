@@ -238,9 +238,11 @@ export interface FrameIntegrityResult {
   frames: number;
   /** 损坏帧号（1 起） */
   corrupt: number[];
-  /** 最大「纯黑像素占比」，正常帧通常 < 0.05 */
+  /** 最大纯黑像素占比（仅作诊断；正常黑底画面也可能接近 1） */
   maxBlackRatio: number;
   medianBlackRatio: number;
+  /** 与上下镜像位置不匹配的近全黑水平行占比；圆盘外的对称黑底不算损坏 */
+  maxMissingRowRatio: number;
 }
 
 /**
@@ -248,7 +250,9 @@ export interface FrameIntegrityResult {
  *
  * 某些 GPU 光栅化路径（macOS 无头 Chrome 的 egl / angle-egl）会静默只画出顶部
  * 若干水平条带、其余纯黑。此时单帧尺寸、ffprobe 的分辨率/帧率/帧数/时长、
- * 甚至 ffmpeg 解码全部正常，只有逐帧统计「纯黑像素占比」能发现。
+ * 甚至 ffmpeg 解码全部正常。纯黑像素比例只能筛出候选帧，不能直接判坏：
+ * 黑底圆盘和竖屏留黑本来就有大面积黑色。再检查近全黑水平行是否与上下
+ * 镜像位置显著不一致，区分正常的对称黑底与单侧缺失的水平条带。
  *
  * 用 ffmpeg 缩到 640x360 输出 rawvideo，边流边算：内存恒定（只缓冲一帧），
  * 不随视频长度增长。
@@ -285,6 +289,7 @@ export function scanFrameIntegrity(
 
     const ratios: number[] = [];
     const corrupt: number[] = [];
+    let maxMissingRowRatio = 0;
     let pending: Buffer = Buffer.alloc(0);
     let stderr = "";
     let settled = false;
@@ -307,6 +312,7 @@ export function scanFrameIntegrity(
         corrupt,
         maxBlackRatio: ratios.length ? Math.max(...ratios) : 0,
         medianBlackRatio: sorted.length ? sorted[Math.floor(sorted.length / 2)]! : 0,
+        maxMissingRowRatio,
       });
     };
 
@@ -315,12 +321,24 @@ export function scanFrameIntegrity(
       let offset = 0;
       while (pending.length - offset >= frameBytes) {
         let black = 0;
+        const blackByRow = new Uint32Array(height);
         for (let p = offset; p < offset + frameBytes; p += 3) {
-          if (pending[p]! <= 1 && pending[p + 1]! <= 1 && pending[p + 2]! <= 1) black++;
+          if (pending[p]! <= 1 && pending[p + 1]! <= 1 && pending[p + 2]! <= 1) {
+            black++;
+            blackByRow[Math.floor((p - offset) / (width * 3))]++;
+          }
         }
         const ratio = black / (width * height);
         ratios.push(ratio);
-        if (ratio > limit) corrupt.push(ratios.length);
+        let missingRows = 0;
+        if (ratio > limit) {
+          for (let y = 0; y < height; y++) {
+            if (blackByRow[y]! / width >= 0.98 && blackByRow[height - 1 - y]! / width < 0.9) missingRows++;
+          }
+        }
+        const missingRowRatio = missingRows / height;
+        maxMissingRowRatio = Math.max(maxMissingRowRatio, missingRowRatio);
+        if (missingRowRatio > 0.08) corrupt.push(ratios.length);
         offset += frameBytes;
       }
       pending = offset ? pending.subarray(offset) : pending;
@@ -340,7 +358,7 @@ export function scanFrameIntegrity(
     });
     child.on("error", (err) => finish(new Error(`无法扫描成片画面完整性：${err.message}`)));
     child.on("close", (code) => {
-      if (code !== 0 && ratios.length === 0) {
+      if (code !== 0 || ratios.length === 0 || pending.length !== 0) {
         return finish(new Error(`扫描成片画面完整性失败：${stderr.trim().split("\n").slice(-1)[0] ?? `ffmpeg 退出码 ${code}`}`));
       }
       finish(null);

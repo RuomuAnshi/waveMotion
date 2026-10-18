@@ -75,7 +75,7 @@ npm start          # → http://127.0.0.1:3210
 
 | 模板 | 画面表现 | 音频响应 |
 |---|---|---|
-| **渐变几何脉冲** | 柔和渐变、多边形描边、缓慢放大构图 | 拍点触发缩放与描边扩散，低频控制冲击幅度 |
+| **渐变几何脉冲** | 黑底实心渐变圆盘放大，休止段收回圆盘 | 拍点触发向外扩散、变细并消失的描边，连续插值颜色和尺寸 |
 | **霓虹光环** | 多层同心光环、辉光、旋转轨迹 | 拍点扩散，频段能量改变环形轮廓尖刺 |
 | **镜像频谱** | 中心对称的频谱条阵 | 频谱驱动条高，拍点增强亮度与整体缩放 |
 | **粒子星场** | 有纵深的粒子漂移与放射 | 低频推动速度，瞬态触发粒子爆发 |
@@ -227,6 +227,7 @@ npm run verify:acceptance:frames       # 预览帧 vs 成片帧逐像素对比�
 npm run verify:acceptance:engine      # 动画逻辑确定性：513 帧逐字段 + 打乱帧序（0 容差）
 npm run verify:acceptance:determinism  # 像素确定性：同帧重复渲染 + 跳帧渲染（视觉等价容差）
 npm run verify:acceptance:integrity    # 整片画面完整性：逐帧扫描丢条带
+npm run verify:reference-style         # 参考风格行为 + 横竖屏黑底与缺条带区分
 npm run verify:acceptance:outputs      # 5 组输出规格 + 队列/取消/重试（需先启动服务）
 npm run verify:acceptance:project      # 项目配置保存/载入/导入导出（需先启动服务）
 npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆（需先启动服务）
@@ -271,7 +272,7 @@ npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆
 - **确定性**：所有动画由「当前帧 + 分析数据 + 固定种子」纯函数计算，没有跨帧状态；粒子和隧道不依赖上一帧位置，因此可以随机跳帧渲染。`src/engine` 与 `src/remotion` 内不出现 `Math.random`／`Date.now`／`performance.now`，随机性统一走 `mulberry32` 种子哈希。
 - **渲染后端**：导出默认使用 `gl: "angle"`，因为它是唯一能稳定产出「整片画面完整」成片的后端。用 1920×1080×513 帧整片、每后端连渲两次实测：`angle` 两次均 0/513 帧损坏；`egl` 77/513、`angle-egl` 51~72/513、`swiftshader` 52~66/513 帧损坏——单帧尺寸与 ffprobe 元数据全部正常，但画面只画出顶部若干水平条带、其余纯黑（Remotion issue #11428 的 GPU 光栅化失败），只有逐帧像素扫描才能发现。`swangle` 虽然完整，但速度慢约 10 倍且跨次差异极大（PSNR 20 dB），不可用。
   注意不要用「同帧 renderStill 重复渲染」来选后端：`egl` 在这项上确实是 12/12 轮逐像素 0 差异，但那只测单帧，测不出整片丢条带。**单帧确定性 ≠ 视频帧完整性。**
-  可用环境变量 `WAVEMOTION_GL` 覆盖；整片完整性由 `npm run verify:acceptance:integrity` 把关，导出流程本身也会逐帧扫描，损坏帧超过 5% 直接判失败并提示原因，不把坏片交给用户（`WAVEMOTION_SKIP_INTEGRITY=1` 可跳过）。
+  可用环境变量 `WAVEMOTION_GL` 覆盖；整片完整性由 `npm run verify:acceptance:integrity` 把关，导出流程本身也会逐帧扫描，损坏帧超过 5% 直接判失败并提示原因（`WAVEMOTION_SKIP_INTEGRITY=1` 可跳过）。扫描以大面积纯黑筛出候选，再检查上下镜像位置不匹配的近全黑水平行；黑底圆盘、对称留黑和纯黑尾帧不会仅因黑色面积大而被判为损坏。这是检测单侧缺条带的启发式检查，不是所有画面异常的通用判定。
 
 ## 首版范围之外
 

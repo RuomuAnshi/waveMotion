@@ -190,7 +190,7 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
 
   // 画面完整性兜底：某些 GPU 光栅化路径会静默丢条带（只画顶部若干水平行、
   // 其余纯黑），而分辨率/帧率/帧数/时长/解码全部正常，ffprobe 查不出来。
-  // 这里逐帧统计纯黑像素占比，损坏帧过多就让任务失败，不把坏片交给用户。
+  // 扫描单侧缺失的水平行；大面积对称黑底（如渐变圆盘）本身不算损坏。
   if (process.env.WAVEMOTION_SKIP_INTEGRITY !== "1") {
     const integrity = await scanFrameIntegrity(outputPath);
     const corrupt = integrity.corrupt.length;
@@ -198,7 +198,7 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
     if (corrupt > allowed) {
       throw new Error(
         `成片画面不完整：${integrity.frames} 帧里有 ${corrupt} 帧只渲染出部分画面` +
-          `（最大纯黑占比 ${(integrity.maxBlackRatio * 100).toFixed(0)}%）。` +
+          `（最大单侧缺失行占比 ${(integrity.maxMissingRowRatio * 100).toFixed(0)}%）。` +
           `这是 GPU 光栅化丢条带，不是编码问题。` +
           `请改用环境变量 WAVEMOTION_GL=angle 或降低渲染并发后重试。`,
       );

@@ -7,7 +7,7 @@
  *   - 单帧尺寸仍是 1920x1080
  *   - ffprobe 的分辨率/帧率/帧数/时长全部正常
  *   - ffmpeg 解码也不报错
- * 只有逐帧统计「纯黑像素占比」才能发现。实测 egl 在 513 帧整片里有 77 帧损坏，
+ * 需要逐帧检查单侧缺失的水平行。历史扫描实测 egl 在 513 帧整片里有 77 帧损坏，
  * angle-egl 51~72 帧，而 angle 两次都是 0 帧。
  *
  * 因此这里必须渲染【整片】，不能用 renderStill 或短片段代替：短段和单帧
@@ -26,8 +26,8 @@ const checker = createChecker();
 
 // 与生产导出保持一致的后端；可用 WM_GL 覆盖以复现坏后端
 const gl = process.env.WM_GL || "angle";
-// 损坏阈值：缩到 640x360 后，纯黑(所有通道<=1)像素占比超过这个比例即判为损坏。
-// 正常帧的纯黑占比约 0.02~0.05（暗场背景仍带渐变），损坏帧通常 >0.5。
+// 候选阈值：大面积黑色后继续检查单侧缺失的水平行。
+// 黑底圆盘和纯黑尾帧不能仅凭黑色面积判坏。
 const BLACK_RATIO_LIMIT = 0.10;
 // 允许的损坏帧数（0 表示必须完全干净）
 const MAX_CORRUPT = Number(process.env.WM_MAX_CORRUPT ?? 0);
@@ -76,7 +76,7 @@ if (scan.corrupt.length > 0) {
 
 checker.check("整片帧数与分析时长一致", scan.frames === totalFrames, `${scan.frames} vs ${totalFrames}`);
 checker.check(`损坏帧数不超过 ${MAX_CORRUPT}`, scan.corrupt.length <= MAX_CORRUPT, `${scan.corrupt.length} 帧`);
-checker.check("最大纯黑占比在正常范围内", scan.maxBlackRatio <= BLACK_RATIO_LIMIT, String(scan.maxBlackRatio));
+checker.check("没有单侧缺失的水平条带", scan.maxMissingRowRatio <= 0.08, String(scan.maxMissingRowRatio));
 
 if (scan.corrupt.length > 0) {
   console.log("\n提示：这是 GPU 光栅化丢条带，不是编码问题。");

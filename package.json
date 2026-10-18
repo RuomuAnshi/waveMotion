@@ -22,7 +22,8 @@
     "verify:acceptance:outputs": "node tests/acceptance-outputs.mjs",
     "verify:acceptance:project": "node tests/acceptance-project.mjs",
     "verify:acceptance:ui": "node tests/acceptance-ui.mjs",
-    "verify:acceptance:integrity": "node tests/acceptance-integrity.mjs"
+    "verify:acceptance:integrity": "node tests/acceptance-integrity.mjs",
+    "verify:reference-style": "tsx tests/reference-style.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.4",
