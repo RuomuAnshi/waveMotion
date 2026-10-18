@@ -128,6 +128,15 @@ npm start          # → http://127.0.0.1:3210
 
 所有动画都由**当前帧 + 分析数据 + 固定随机种子**计算得出，没有任何跨帧状态。粒子和隧道同样支持直接跳转到任意帧——这既是 Remotion 的渲染要求，也保证了**预览与成片完全一致**、重复渲染结果可复现。
 
+确定性分两层验收，因为「逻辑完全相同」和「像素完全相同」不是一回事：
+
+| 层次 | 验证方式 | 判定 | 命令 |
+|---|---|---|---|
+| 动画逻辑 | 遍历 513 帧逐字段比对、打乱帧序访问、纯函数重入 | **0 差异（严格）** | `npm run verify:acceptance:engine` |
+| 像素输出 | 同帧重复渲染、跳帧 vs 顺序渲染 | 视觉等价：max ≤ 8/255 且 PSNR ≥ 45 dB | `npm run verify:acceptance:determinism` |
+
+像素层用容差而不是「逐像素 0 差异」，是因为 Chromium 的 GPU 分块光栅化在同一台机器上存在间歇性竞态：同一帧两次渲染，多数情况逐像素完全相同，偶发约 1.3M 像素相差 4/255（呈水平条带，PSNR ≈ 54 dB）。这属于光栅化噪声，不影响画面内容。实测过 `egl`／`angle-egl`／`swangle`／`swiftshader`／`vulkan`、以及 `--disable-gpu-rasterization`／`--disable-partial-raster`／`--num-raster-threads=1` 等组合：能把单帧差异压到 0 的，整片就会丢条带（最多 189/513 帧损坏）；能保证整片完整的，就仍会偶发抖动。**在本机 Metal 上这两个性质互斥**，而整片完整性是用户能直接看到的，优先级更高，所以默认保留 `angle`，并把「动画逻辑 0 差异」放到不经过 GPU 的引擎层严格把关。
+
 ## 输出规格
 
 | 比例 | 1080 级 | 1440 级 |
@@ -215,7 +224,9 @@ npm run typecheck          # TypeScript 全量类型检查
 npm run verify:acceptance:bpm          # 5 组已知 BPM 的合成击拍，比对检测精度
 npm run verify:acceptance:edge         # 半速/双速/手动偏移 + 静音/弱音/无节拍/损坏音频
 npm run verify:acceptance:frames       # 预览帧 vs 成片帧逐像素对比（PSNR）
-npm run verify:acceptance:determinism  # 同帧重复渲染 + 跳帧渲染，逐像素比对
+npm run verify:acceptance:engine      # 动画逻辑确定性：513 帧逐字段 + 打乱帧序（0 容差）
+npm run verify:acceptance:determinism  # 像素确定性：同帧重复渲染 + 跳帧渲染（视觉等价容差）
+npm run verify:acceptance:integrity    # 整片画面完整性：逐帧扫描丢条带
 npm run verify:acceptance:outputs      # 5 组输出规格 + 队列/取消/重试（需先启动服务）
 npm run verify:acceptance:project      # 项目配置保存/载入/导入导出（需先启动服务）
 npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆（需先启动服务）
@@ -241,7 +252,8 @@ npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆
 | BPM 精度（5 组 90~140 BPM 合成击拍） | 最大误差 **0.033%**（要求 ≤ 1%） |
 | 校正后视觉触发误差 | **0.0000 帧**（要求 ≤ 1 帧） |
 | 预览帧 vs 成片帧（PSNR） | **46.91 dB**（阈值 40 dB） |
-| 确定性（同帧重复渲染 / 跳帧渲染） | 逐像素 **0 差异** |
+| 动画逻辑确定性（513 帧逐字段 / 打乱帧序） | 逐字段 **0 差异** |
+| 像素确定性（同帧重复渲染 / 跳帧渲染） | 视觉等价 **max ≤ 8/255，PSNR ≥ 45 dB**（实测多为逐像素完全一致） |
 | 边界音频（半速 / 双速 / 偏移 / 静音 / 弱音 / 无节拍 / 损坏） | **9/9 通过** |
 | 输出规格（5 组比例×分辨率×帧率×音轨） | FFprobe 全部符合 |
 | 队列 / 取消 / 重复取消 / 重试 | 全部符合预期 |
@@ -254,10 +266,10 @@ npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆
 - **节拍显著性**：单纯用拍点规律性判断会因为纯噪声也得到规整的伪拍点。分析会比较拍点位置与反拍位置的起音强度，得到「节拍重音是否明显」的独立指标，再与稳定性加权成置信度；不明显时主动提示用户手动校正。
 - **导出音轨**：视频用 Remotion 渲染为纯画面（H.264 / `yuv420p` / BT.709），再用 FFmpeg 以 `-c:v copy` 把原音频封装进去。这样既不二次编码视频，也不会因 Remotion 的音频路径产生时长漂移；成片时长严格等于帧数 / 帧率。
 - **像素格式**：Remotion 默认可能输出 `yuvj420p`（full range）。导出时显式指定 `colorSpace: "bt709"`，保证得到 `yuv420p` + TV range，兼容常见播放器与剪辑软件。
-- **确定性**：所有动画由「当前帧 + 分析数据 + 固定种子」纯函数计算，没有跨帧状态；粒子和隧道不依赖上一帧位置，因此可以随机跳帧渲染。
-- **渲染后端**：导出默认使用 `gl: "angle"`，因为它是唯一能稳定产出「整片画面完整」成片的后端。用 1920×1080×513 帧整片、每后端连渲两次实测：`angle` 两次均 0/513 帧损坏；`egl` 77/513、`angle-egl` 51~72/513 帧损坏——单帧尺寸与 ffprobe 元数据全部正常，但画面只画出顶部若干水平条带、其余纯黑（Remotion issue #11428 的 GPU 光栅化失败），只有逐帧像素扫描才能发现。`angle` 的跨次差异只是 H.264 编码决策（PSNR 54 dB、最大 13/255 灰阶），可接受。
+- **确定性**：所有动画由「当前帧 + 分析数据 + 固定种子」纯函数计算，没有跨帧状态；粒子和隧道不依赖上一帧位置，因此可以随机跳帧渲染。`src/engine` 与 `src/remotion` 内不出现 `Math.random`／`Date.now`／`performance.now`，随机性统一走 `mulberry32` 种子哈希。
+- **渲染后端**：导出默认使用 `gl: "angle"`，因为它是唯一能稳定产出「整片画面完整」成片的后端。用 1920×1080×513 帧整片、每后端连渲两次实测：`angle` 两次均 0/513 帧损坏；`egl` 77/513、`angle-egl` 51~72/513、`swiftshader` 52~66/513 帧损坏——单帧尺寸与 ffprobe 元数据全部正常，但画面只画出顶部若干水平条带、其余纯黑（Remotion issue #11428 的 GPU 光栅化失败），只有逐帧像素扫描才能发现。`swangle` 虽然完整，但速度慢约 10 倍且跨次差异极大（PSNR 20 dB），不可用。
   注意不要用「同帧 renderStill 重复渲染」来选后端：`egl` 在这项上确实是 12/12 轮逐像素 0 差异，但那只测单帧，测不出整片丢条带。**单帧确定性 ≠ 视频帧完整性。**
-  可用环境变量 `WAVEMOTION_GL` 覆盖，整片完整性由 `npm run verify:acceptance:integrity` 把关。
+  可用环境变量 `WAVEMOTION_GL` 覆盖；整片完整性由 `npm run verify:acceptance:integrity` 把关，导出流程本身也会逐帧扫描，损坏帧超过 5% 直接判失败并提示原因，不把坏片交给用户（`WAVEMOTION_SKIP_INTEGRITY=1` 可跳过）。
 
 ## 首版范围之外
 

@@ -18,6 +18,7 @@
     "verify:acceptance:edge": "node tests/acceptance-edge.mjs",
     "verify:acceptance:frames": "node tests/acceptance-frame-match.mjs",
     "verify:acceptance:determinism": "node tests/acceptance-determinism.mjs",
+    "verify:acceptance:engine": "tsx tests/acceptance-engine.ts",
     "verify:acceptance:outputs": "node tests/acceptance-outputs.mjs",
     "verify:acceptance:project": "node tests/acceptance-project.mjs",
     "verify:acceptance:ui": "node tests/acceptance-ui.mjs",

@@ -81,7 +81,8 @@ checker.check("最大纯黑占比在正常范围内", scan.maxBlackRatio <= BLAC
 if (scan.corrupt.length > 0) {
   console.log("\n提示：这是 GPU 光栅化丢条带，不是编码问题。");
   console.log("      ffprobe 的尺寸/帧率/帧数/时长都会显示「正常」，只有逐帧像素扫描能发现。");
-  console.log("      换一个 GL 后端（WAVEMOTION_GL=angle）再试。");
+  console.log("      生产默认已是 WAVEMOTION_GL=angle（最完整）；仍出现损坏说明当前机器\n"
+    + "      GPU 光栅化不稳定，可尝试降低渲染并发后重试，或换一台机器导出。");
 }
 
 checker.summary();
