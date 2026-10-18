@@ -74,11 +74,14 @@ export async function buildServer() {
       decorateReply: false,
       wildcard: false,
     });
+    // SPA 回退：直接读文件而不走 reply.sendFile —— sendFile 的根目录绑定在
+    // 第一个 decorateReply 的静态注册（/renders/）上，用于前端会找错目录。
+    const indexHtml = fs.readFileSync(distIndex);
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith("/api/") || req.url.startsWith("/renders/") || req.url.startsWith("/media/")) {
         return reply.code(404).send({ error: "接口不存在" });
       }
-      return reply.sendFile("index.html");
+      return reply.code(200).type("text/html; charset=utf-8").send(indexHtml);
     });
   } else if (!IS_DEV) {
     app.get("/", async (_req, reply) => {

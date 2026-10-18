@@ -9,10 +9,11 @@ import type {
   RenderJob,
   RhythmConfig,
   TemplateId,
+  TemplateParams,
   VisualConfig,
 } from "../shared/types.ts";
 import { resolveOutputSpec } from "../shared/types.ts";
-import { DEFAULT_OUTPUT, DEFAULT_VISUAL, defaultTemplateParams } from "../shared/constants.ts";
+import { DEFAULT_OUTPUT, DEFAULT_VISUAL, allDefaultTemplateParams, defaultTemplateParams } from "../shared/constants.ts";
 import { api } from "./api.ts";
 import { AudioPanel } from "./components/AudioPanel.tsx";
 import { PreviewStage } from "./components/PreviewStage.tsx";
@@ -68,6 +69,17 @@ export const App: React.FC = () => {
   const [playing, setPlaying] = useState(false);
 
   const playerRef = useRef<PlayerRef | null>(null);
+  /** 每个模板分别记住上次用过的参数，切回来时恢复 */
+  const paramsByTemplateRef = useRef<Record<string, TemplateParams>>(
+    (() => {
+      const base = allDefaultTemplateParams();
+      const restoredVisual = restored.current?.visual;
+      if (restoredVisual?.template) {
+        base[restoredVisual.template] = restoredVisual.templateParams ?? defaultTemplateParams(restoredVisual.template);
+      }
+      return base;
+    })(),
+  );
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
     const id = Date.now() + Math.random();
@@ -208,18 +220,30 @@ export const App: React.FC = () => {
 
   const handleTemplateChange = useCallback(
     (template: TemplateId) => {
-      setVisual((prev) => ({
-        ...prev,
-        template,
-        // 不同模板分别保留上次参数：切回来时恢复该模板的默认/上次设置
-        templateParams: prev.templateParams ?? defaultTemplateParams(template),
-      }));
+      setVisual((prev) => {
+        // 先把当前模板的参数存起来，再换成目标模板自己的参数
+        paramsByTemplateRef.current[prev.template] = prev.templateParams;
+        const next = paramsByTemplateRef.current[template] ?? defaultTemplateParams(template);
+        paramsByTemplateRef.current[template] = next;
+        return { ...prev, template, templateParams: { ...next } };
+      });
     },
     [],
   );
 
   const handleParamChange = useCallback((key: string, value: number | boolean) => {
-    setVisual((prev) => ({ ...prev, templateParams: { ...prev.templateParams, [key]: value } }));
+    setVisual((prev) => {
+      const next = { ...prev.templateParams, [key]: value };
+      paramsByTemplateRef.current[prev.template] = next;
+      return { ...prev, templateParams: next };
+    });
+  }, []);
+
+  /** 载入配置时，把该配置里的模板参数并入按模板记忆的缓存 */
+  const applyVisual = useCallback((next: VisualConfig) => {
+    const params = next.templateParams ?? defaultTemplateParams(next.template);
+    paramsByTemplateRef.current[next.template] = params;
+    setVisual({ ...next, templateParams: { ...params } });
   }, []);
 
   const handleRhythmChange = useCallback((rhythm: RhythmConfig) => {
@@ -341,7 +365,7 @@ export const App: React.FC = () => {
     async (id: string) => {
       try {
         const { project } = await api.getProject(id);
-        setVisual(project.visual);
+        applyVisual(project.visual);
         setOutput(project.output);
         if (project.audio.audioId) setSelectedId(project.audio.audioId);
         toast("success", `已载入「${project.name}」`);
@@ -349,7 +373,7 @@ export const App: React.FC = () => {
         toast("error", `载入失败：${(err as Error).message}`);
       }
     },
-    [toast],
+    [applyVisual, toast],
   );
 
   const handleDeleteProject = useCallback(
@@ -373,14 +397,14 @@ export const App: React.FC = () => {
         const { project } = await api.importProject(parsed);
         const { projects: list } = await api.listProjects();
         setProjects(list);
-        setVisual(project.visual);
+        applyVisual(project.visual);
         setOutput(project.output);
         toast("success", `已导入「${project.name}」`);
       } catch (err) {
         toast("error", `导入失败：${(err as Error).message}`);
       }
     },
-    [toast],
+    [applyVisual, toast],
   );
 
   const handleExportProjectJson = useCallback((id: string) => {
