@@ -1,0 +1,33 @@
+# deps
+node_modules/
+.npm-cache/
+.uv-cache/
+.pnpm-store/
+
+# python env
+.venv/
+.uv-python/
+__pycache__/
+*.pyc
+
+# build output
+dist/
+dist-remotion/
+remotion-bundle/
+
+# runtime data
+data/
+renders/
+*.log
+
+# OS
+.DS_Store
+
+# 素材（体积大，仅本地保留，不进入版本库）
+assets/
+
+# probe/scratch
+probe/
+
+# macOS AppleDouble metadata (exFAT volumes)
+._*

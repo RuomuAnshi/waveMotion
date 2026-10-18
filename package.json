@@ -1,0 +1,37 @@
+{
+  "name": "wavemotion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "WaveMotion - local music-reactive background video maker built on Remotion",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "build": "vite build",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
+    "setup:python": "bash scripts/setup-python.sh",
+    "typecheck": "tsc --noEmit",
+    "verify:analysis": "tsx scripts/verify-analysis.ts",
+    "verify:render": "tsx scripts/verify-render.ts"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^10.1.4",
+    "@fastify/static": "^10.1.6",
+    "@remotion/bundler": "4.0.536",
+    "@remotion/player": "4.0.536",
+    "@remotion/renderer": "4.0.536",
+    "fastify": "^5.12.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "4.0.536"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "cross-env": "^10.1.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7"
+  }
+}
