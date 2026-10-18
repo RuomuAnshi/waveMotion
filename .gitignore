@@ -31,3 +31,4 @@ probe/
 
 # macOS AppleDouble metadata (exFAT volumes)
 ._*
+_t/

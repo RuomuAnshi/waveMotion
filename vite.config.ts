@@ -12,10 +12,11 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5179,
     strictPort: true,
+    // 注意：必须带结尾斜杠，否则会把源码文件 /api.ts 也代理到后端造成 404
     proxy: {
-      "/api": "http://127.0.0.1:3210",
-      "/media": "http://127.0.0.1:3210",
-      "/renders": "http://127.0.0.1:3210",
+      "/api/": "http://127.0.0.1:3210",
+      "/media/": "http://127.0.0.1:3210",
+      "/renders/": "http://127.0.0.1:3210",
     },
   },
   build: {

@@ -51,10 +51,10 @@ export function resolveColors(palette: PaletteId, custom: ColorSet): ColorSet {
 /** 每个模板的可调参数（只展示相关项） */
 export const TEMPLATE_PARAMS: Record<TemplateId, TemplateParamSpec[]> = {
   gradientPulse: [
-    { key: "polygonSides", label: "多边形边数", type: "number", min: 3, max: 24, step: 1, default: 10, hint: "描边主体的顶点数" },
-    { key: "ringCount", label: "描边层数", type: "number", min: 1, max: 5, step: 1, default: 2 },
+    { key: "polygonSides", label: "多边形边数", type: "number", min: 3, max: 24, step: 1, default: 22, hint: "描边主体的顶点数，接近 24 时几乎为圆" },
+    { key: "ringCount", label: "描边层数", type: "number", min: 1, max: 5, step: 1, default: 1 },
     { key: "blobAmount", label: "色彩扩散", type: "number", min: 0, max: 1, step: 0.05, default: 0.6 },
-    { key: "wobble", label: "轮廓抖动", type: "number", min: 0, max: 1, step: 0.05, default: 0.45 },
+    { key: "wobble", label: "轮廓抖动", type: "number", min: 0, max: 1, step: 0.05, default: 0.42 },
   ],
   neonHalo: [
     { key: "haloCount", label: "光环数量", type: "number", min: 2, max: 10, step: 1, default: 5 },
