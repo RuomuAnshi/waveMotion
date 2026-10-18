@@ -59,6 +59,9 @@ try {
       expression: `(function(){try{return JSON.stringify(${expr})}catch(e){return JSON.stringify({__err:String(e)})}})()`,
       awaitPromise: true,
       returnByValue: true,
+      // CDP evaluations which click playback controls must carry the same user
+      // activation as a real click; otherwise Chromium blocks audible autoplay.
+      userGesture: true,
     });
     if (r.exceptionDetails) return { __exc: JSON.stringify(r.exceptionDetails).slice(0, 300) };
     try { return JSON.parse(r.result.value); } catch { return r.result.value; }
@@ -123,7 +126,9 @@ try {
   if (!previewReady) throw new Error("播放器未加载，无法验证播放状态");
   const timeText = () => evaluate(`document.querySelector(".transport-time .mono").textContent`);
   await evaluate(`(() => { document.querySelector('.transport button[title="播放 / 暂停（空格）"]').click(); return true; })()`);
-  check("首次播放更新按钮和时间", await waitFor(`document.querySelector('.transport button[title="播放 / 暂停（空格）"]').textContent.includes("暂停") && document.querySelector(".transport-time .mono").textContent !== "0:00.00"`, 10000));
+  const playbackReady = await waitFor(`document.querySelector('.transport button[title="播放 / 暂停（空格）"]').textContent.includes("暂停") && document.querySelector(".transport-time .mono").textContent !== "0:00.00"`, 10000);
+  check("首次播放更新按钮和时间", playbackReady);
+  if (!playbackReady) console.log("播放诊断：", await evaluate(`({transport:document.querySelector(".transport").textContent, audio:[...document.querySelectorAll("audio")].map(a=>({paused:a.paused,time:a.currentTime,readyState:a.readyState,error:a.error?.message}))})`));
   await evaluate(`(() => { document.querySelector('.transport button[title="播放 / 暂停（空格）"]').click(); return true; })()`);
   check("暂停后按钮恢复播放", await waitFor(`document.querySelector('.transport button[title="播放 / 暂停（空格）"]').textContent.includes("播放")`));
   await sleep(200);
