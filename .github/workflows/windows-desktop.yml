@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: windows-desktop-${{ github.ref }}
+  group: windows-desktop-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
   package:

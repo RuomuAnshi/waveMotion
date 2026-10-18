@@ -19,7 +19,7 @@ function menu() {
   ]));
 }
 async function createWindow() {
-  window = new BrowserWindow({width:1440,height:960,minWidth:600,minHeight:640,backgroundColor:'#08080b',show:false,title:'WaveMotion',webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  window = new BrowserWindow({width:1440,height:960,minWidth:600,minHeight:640,backgroundColor:'#111113',icon:path.join(app.getAppPath(),'dist/web/wavemotion-icon.png'),show:false,title:'WaveMotion',webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true}});
   window.webContents.session.setPermissionRequestHandler((_webContents,_permission,callback)=>callback(false));
   window.webContents.setWindowOpenHandler(({url})=>{
     if(allowNavigation(url,appUrl) && new URL(url).pathname.endsWith('/export'))window.webContents.downloadURL(url);

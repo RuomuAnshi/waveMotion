@@ -516,3 +516,6 @@ input[type="checkbox"] { accent-color: #a89bfa; }
   .sidebar-right > [role="tabpanel"] { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #3a3a40 transparent; }
   .sidebar-right > [role="tabpanel"]::-webkit-scrollbar { width: 5px; }
 }
+
+.brand-mark:has(img) { border: 0; background: transparent; }
+.brand-mark img { display: block; width: 36px; height: 36px; object-fit: contain; }

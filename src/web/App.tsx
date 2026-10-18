@@ -429,7 +429,7 @@ export const App: React.FC = () => {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark"><Icon name="wave" size={22} /></span>
+          <span className="brand-mark"><img src="/wavemotion-icon.png" width={32} height={32} alt="" /></span>
           <div>
             <h1>WaveMotion</h1>
             <p>STUDIO</p>
