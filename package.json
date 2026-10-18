@@ -20,7 +20,8 @@
     "verify:acceptance:determinism": "node tests/acceptance-determinism.mjs",
     "verify:acceptance:outputs": "node tests/acceptance-outputs.mjs",
     "verify:acceptance:project": "node tests/acceptance-project.mjs",
-    "verify:acceptance:ui": "node tests/acceptance-ui.mjs"
+    "verify:acceptance:ui": "node tests/acceptance-ui.mjs",
+    "verify:acceptance:integrity": "node tests/acceptance-integrity.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.4",

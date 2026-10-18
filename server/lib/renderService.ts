@@ -4,7 +4,7 @@ import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition, ensureBrowser, makeCancelSignal } from "@remotion/renderer";
 import type { RenderJob, AudioAnalysis } from "../../src/shared/types.ts";
 import { RENDERS_DIR, ensureDir, uniqueFileName } from "./paths.ts";
-import { verifyRender, runFfmpeg } from "./ffmpeg.ts";
+import { verifyRender, runFfmpeg, scanFrameIntegrity } from "./ffmpeg.ts";
 import { TMP_DIR } from "./paths.ts";
 import { ROOT_DIR } from "./paths.ts";
 
@@ -13,12 +13,19 @@ const ENTRY_POINT = path.join(ROOT_DIR, "src/remotion/root.tsx");
 /**
  * 渲染用 OpenGL 后端。
  *
- * 默认 egl：实测（macOS + 系统 Chrome）同帧重复渲染 12 轮逐像素完全一致，
- * 且比默认的 angle 更快（1920x1080 30 帧 5.9s vs 7.6s）。angle 走 Metal 时
- * 会偶发 ±4/255 的 GPU 光栅分块抖动，导致同一帧两次导出结果不同。
- * 其他平台可通过 WAVEMOTION_GL 覆盖；若 egl 不可用可退回 angle-egl。
+ * 默认 angle：这是唯一能稳定产出「整片画面完整」成片的后端。实测（macOS +
+ * 系统 Chrome，1920x1080x513 帧整片，每后端连渲两次）：angle 两次均 0/513
+ * 帧损坏；egl 77/513、angle-egl 51~72/513 帧损坏——表现为单帧尺寸正常但
+ * 只画出了顶部若干条水平条带、其余纯黑（Remotion issue #11428 GPU 光栅化
+ * 失败），且 ffprobe 元数据与帧数完全正常，只有逐帧像素扫描才能发现。
+ *
+ * 注意：egl 在「单帧 renderStill 重复渲染」上确实逐像素一致（12/12 轮 0
+ * 差异），但那只测单帧、测不出整片丢条带。单帧确定性 ≠ 视频帧完整性。
+ * angle 的跨次差异只是 H.264 编码决策（PSNR 54dB / max 13 灰阶），可接受。
+ *
+ * 其他平台可通过 WAVEMOTION_GL 覆盖。
  */
-const DEFAULT_GL = "egl";
+const DEFAULT_GL = "angle";
 const VALID_GL = ["swangle", "angle", "egl", "swiftshader", "vulkan", "angle-egl"] as const;
 
 export type GlRenderer = NonNullable<Parameters<typeof renderMedia>[0]["chromiumOptions"]>["gl"];
@@ -179,6 +186,23 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
     }
     fs.rmSync(videoOnlyPath, { force: true });
     if (isCancelled()) return undefined;
+  }
+
+  // 画面完整性兜底：某些 GPU 光栅化路径会静默丢条带（只画顶部若干水平行、
+  // 其余纯黑），而分辨率/帧率/帧数/时长/解码全部正常，ffprobe 查不出来。
+  // 这里逐帧统计纯黑像素占比，损坏帧过多就让任务失败，不把坏片交给用户。
+  if (process.env.WAVEMOTION_SKIP_INTEGRITY !== "1") {
+    const integrity = await scanFrameIntegrity(outputPath);
+    const corrupt = integrity.corrupt.length;
+    const allowed = Math.floor(integrity.frames * 0.05);
+    if (corrupt > allowed) {
+      throw new Error(
+        `成片画面不完整：${integrity.frames} 帧里有 ${corrupt} 帧只渲染出部分画面` +
+          `（最大纯黑占比 ${(integrity.maxBlackRatio * 100).toFixed(0)}%）。` +
+          `这是 GPU 光栅化丢条带，不是编码问题。` +
+          `请改用环境变量 WAVEMOTION_GL=angle 或降低渲染并发后重试。`,
+      );
+    }
   }
 
   const expectedDurationSec = snapshot.totalFrames / spec.output.fps;

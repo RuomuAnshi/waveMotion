@@ -49,8 +49,8 @@ const inputProps = {
   output: { width: 1920, height: 1080, fps, totalFrames },
 };
 
-// 与生产导出保持一致的 GL 后端（renderService 用 egl：逐像素确定且最快）
-const gl = process.env.WM_GL || "egl";
+// 与生产导出保持一致的 GL 后端（renderService 默认 angle：整片画面完整）
+const gl = process.env.WM_GL || "angle";
 console.log(`bundle... (template=${template}, frame=${targetFrame}, gl=${gl})`);
 const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src/remotion/root.tsx") });
 const composition = await selectComposition({

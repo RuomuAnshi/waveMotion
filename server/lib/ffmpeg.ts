@@ -232,3 +232,118 @@ export function runFfmpeg(args: string[]): Promise<{ code: number; stderr: strin
     child.on("close", (code) => resolve({ code: code ?? -1, stderr }));
   });
 }
+
+/** 整片画面完整性扫描结果 */
+export interface FrameIntegrityResult {
+  frames: number;
+  /** 损坏帧号（1 起） */
+  corrupt: number[];
+  /** 最大「纯黑像素占比」，正常帧通常 < 0.05 */
+  maxBlackRatio: number;
+  medianBlackRatio: number;
+}
+
+/**
+ * 逐帧扫描「画面缺条带」损坏。
+ *
+ * 某些 GPU 光栅化路径（macOS 无头 Chrome 的 egl / angle-egl）会静默只画出顶部
+ * 若干水平条带、其余纯黑。此时单帧尺寸、ffprobe 的分辨率/帧率/帧数/时长、
+ * 甚至 ffmpeg 解码全部正常，只有逐帧统计「纯黑像素占比」能发现。
+ *
+ * 用 ffmpeg 缩到 640x360 输出 rawvideo，边流边算：内存恒定（只缓冲一帧），
+ * 不随视频长度增长。
+ */
+export function scanFrameIntegrity(
+  filePath: string,
+  options: {
+    blackRatioLimit?: number;
+    width?: number;
+    height?: number;
+    /** 超过这个秒数就放弃，避免异常输入把服务卡死 */
+    timeoutMs?: number;
+  } = {},
+): Promise<FrameIntegrityResult> {
+  const bin = resolveFfmpegBin();
+  const width = options.width ?? 640;
+  const height = options.height ?? 360;
+  const limit = options.blackRatioLimit ?? 0.1;
+  const frameBytes = width * height * 3;
+  const timeoutMs = options.timeoutMs ?? 10 * 60_000;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      bin,
+      [
+        "-v", "error",
+        "-i", filePath,
+        "-vf", `scale=${width}:${height}:flags=area,format=rgb24`,
+        "-f", "rawvideo",
+        "-",
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    const ratios: number[] = [];
+    const corrupt: number[] = [];
+    let pending: Buffer = Buffer.alloc(0);
+    let stderr = "";
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      reject(new Error(`扫描成片画面完整性超时（${Math.round(timeoutMs / 1000)}s）`));
+    }, timeoutMs);
+
+    const finish = (err: Error | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) return reject(err);
+      const sorted = [...ratios].sort((a, b) => a - b);
+      resolve({
+        frames: ratios.length,
+        corrupt,
+        maxBlackRatio: ratios.length ? Math.max(...ratios) : 0,
+        medianBlackRatio: sorted.length ? sorted[Math.floor(sorted.length / 2)]! : 0,
+      });
+    };
+
+    const consume = (chunk: Buffer) => {
+      pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
+      let offset = 0;
+      while (pending.length - offset >= frameBytes) {
+        let black = 0;
+        for (let p = offset; p < offset + frameBytes; p += 3) {
+          if (pending[p]! <= 1 && pending[p + 1]! <= 1 && pending[p + 2]! <= 1) black++;
+        }
+        const ratio = black / (width * height);
+        ratios.push(ratio);
+        if (ratio > limit) corrupt.push(ratios.length);
+        offset += frameBytes;
+      }
+      pending = offset ? pending.subarray(offset) : pending;
+    };
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      try {
+        consume(chunk);
+      } catch (err) {
+        child.kill("SIGKILL");
+        finish(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+    child.stderr.on("data", (d) => {
+      stderr += String(d);
+      if (stderr.length > 32_000) stderr = stderr.slice(-16_000);
+    });
+    child.on("error", (err) => finish(new Error(`无法扫描成片画面完整性：${err.message}`)));
+    child.on("close", (code) => {
+      if (code !== 0 && ratios.length === 0) {
+        return finish(new Error(`扫描成片画面完整性失败：${stderr.trim().split("\n").slice(-1)[0] ?? `ffmpeg 退出码 ${code}`}`));
+      }
+      finish(null);
+    });
+  });
+}

@@ -38,8 +38,8 @@ const inputProps = { analysis, visual, output: { width: 1920, height: 1080, fps,
 const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src/remotion/root.tsx") });
 const composition = await selectComposition({ serveUrl, id: "WaveMotion", browserExecutable: chrome, inputProps });
 
-// 与生产导出保持一致的 GL 后端（renderService 用 egl：逐像素确定且最快）
-const gl = process.env.WM_GL || "egl";
+// 与生产导出保持一致的 GL 后端（renderService 默认 angle：整片画面完整）
+const gl = process.env.WM_GL || "angle";
 
 const pyScript = `
 import sys, numpy as np
