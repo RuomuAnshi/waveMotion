@@ -110,6 +110,72 @@ def estimate_stability(beats):
     return stability, confidence
 
 
+def refine_tempo_by_regression(beats, tempo_val):
+    """用拍点序号对拍点时间做线性回归，得到更精确的 BPM 与起拍相位。
+
+    librosa 的 tempo 估计来自自相关峰值，受 hop 量化限制（hop=256 @22050Hz
+    ≈11.6ms），误差可达 1%。拍点时间本身由帧对齐，但多拍拟合后可以显著
+    降低斜率误差，BPM 精度通常能提升一个量级。
+    返回 (bpm, offset_sec) —— offset 为第 0 拍的拟合时间。
+    """
+    import numpy as np
+
+    arr = np.asarray(beats, dtype=np.float64)
+    if arr.size < 4:
+        return tempo_val, (float(arr[0]) if arr.size else 0.0)
+
+    # 以中位间隔估计周期，把拍点映射到整数序号（处理漏检/多检）
+    intervals = np.diff(arr)
+    med = float(np.median(intervals))
+    if med <= 1e-6:
+        return tempo_val, float(arr[0])
+
+    # 用候选周期把拍点分配给整数拍号；对几个候选做最小二乘，取残差最小者。
+    # 关键：必须约束候选周期不得偏离初估 BPM 太多，否则「隔拍/半拍」的
+    # 候选会以更小的残差胜出（周期减半残差必然更小），导致 BPM 翻倍。
+    base = arr[0]
+    candidates = [p for p in (med, med * 2.0, med / 2.0) if p > 1e-6]
+    if tempo_val > 0:
+        lo_p, hi_p = 60.0 / (tempo_val * 1.12), 60.0 / (tempo_val * 0.88)
+        filtered = [p for p in candidates if lo_p <= p <= hi_p]
+        candidates = filtered or [med]
+    best = None
+    for period in candidates:
+        k = np.round((arr - base) / period)
+        # 要求拍号严格递增且覆盖足够多拍
+        if np.any(np.diff(k) <= 0):
+            continue
+        k = k - k[0]
+        if k[-1] < 4:
+            continue
+        # 最小二乘：t = a + b*k
+        k_mean = float(np.mean(k))
+        t_mean = float(np.mean(arr))
+        denom = float(np.sum((k - k_mean) ** 2))
+        if denom <= 1e-9:
+            continue
+        slope = float(np.sum((k - k_mean) * (arr - t_mean)) / denom)
+        intercept = t_mean - slope * k_mean
+        resid = arr - (intercept + slope * k)
+        rms_resid = float(np.sqrt(np.mean(resid**2)))
+        if best is None or rms_resid < best[3]:
+            best = (slope, intercept, rms_resid, float(k[-1]))
+
+    if best is None:
+        return tempo_val, float(arr[0])
+    slope, intercept, rms_resid, _ = best
+    if slope <= 1e-6:
+        return tempo_val, float(arr[0])
+    # 残差过大说明拟合不可靠，退回原估计
+    if rms_resid > med * 0.22:
+        return tempo_val, float(arr[0])
+    refined = 60.0 / slope
+    # 只在合理范围内采用
+    if refined < 30.0 or refined > 260.0:
+        return tempo_val, float(arr[0])
+    return refined, float(intercept % slope)
+
+
 def estimate_beat_strength(onset_env, onset_times, beats):
     """给每个拍点一个 0..1 的强度，用于幅度驱动。"""
     import numpy as np
@@ -279,6 +345,10 @@ def main() -> int:
         iv = np.diff(np.asarray(beats))
         med = float(np.median(iv))
         tempo_val = 60.0 / med if med > 1e-6 else 0.0
+
+    # 用拍点线性回归精修 BPM（自相关峰值受 hop 量化限制，误差可达 1%）
+    if tempo_val > 0 and len(beats) >= 4:
+        tempo_val, _refined_offset = refine_tempo_by_regression(beats, tempo_val)
 
     # 起音事件
     onset_frames = librosa.onset.onset_detect(
