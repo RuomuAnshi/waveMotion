@@ -1,3 +1,4 @@
+import { Icon } from "./Icon.tsx";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { WaveMotionBackground } from "../../remotion/root.tsx";
@@ -108,7 +109,7 @@ export const PreviewStage: React.FC<PreviewStageProps> = ({
     <div className="preview-host" ref={hostRef}>
       {!analysis ? (
         <div className="preview-empty">
-          <div className="preview-empty-icon">◍</div>
+          <div className="preview-empty-icon"><Icon name="wave" size={48} /></div>
           <p>选择左侧音频后开始预览</p>
         </div>
       ) : (

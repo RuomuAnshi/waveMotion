@@ -2,6 +2,8 @@ import React from "react";
 import type { ColorSet, PaletteId, TemplateId, TemplateParamSpec } from "../../shared/types.ts";
 import { PALETTES, TEMPLATE_META, TEMPLATE_PARAMS } from "../../shared/constants.ts";
 
+import { Icon } from "./Icon.tsx";
+
 interface SliderProps {
   label: string;
   value: number;
@@ -44,6 +46,7 @@ export const PalettePicker: React.FC<PalettePickerProps> = ({ palette, customCol
             className={`palette-swatch${palette === id ? " active" : ""}`}
             onClick={() => onChange(id)}
             title={p.name}
+            aria-pressed={palette === id}
           >
             <span className="palette-bar">
               {[p.colors.primary, p.colors.secondary, p.colors.accent].map((c) => (
@@ -58,6 +61,7 @@ export const PalettePicker: React.FC<PalettePickerProps> = ({ palette, customCol
         className={`palette-swatch${palette === "custom" ? " active" : ""}`}
         onClick={() => onChange("custom")}
         title="自定义颜色"
+        aria-pressed={palette === "custom"}
       >
         <span className="palette-bar">
           {[customColors.primary, customColors.secondary, customColors.accent].map((c, i) => (
@@ -141,10 +145,12 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({ value, onChange 
       <button
         key={meta.id}
         className={`template-card${value === meta.id ? " active" : ""}`}
+        aria-pressed={value === meta.id}
         onClick={() => onChange(meta.id)}
       >
-        <span className="template-card-name">{meta.name}</span>
-        <span className="template-card-desc">{meta.description}</span>
+        <span className={`template-art template-art-${meta.id}`} aria-hidden="true"><i /><i /><i /><i /><i /></span>
+        <span className="template-card-copy"><span className="template-card-name">{meta.name}</span><span className="template-card-desc">{meta.description}</span></span>
+        {value === meta.id && <span className="template-check"><Icon name="check" size={12} /></span>}
       </button>
     ))}
   </div>

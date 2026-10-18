@@ -13,7 +13,7 @@ import type {
   VisualConfig,
 } from "../shared/types.ts";
 import { resolveOutputSpec } from "../shared/types.ts";
-import { DEFAULT_OUTPUT, DEFAULT_VISUAL, allDefaultTemplateParams, defaultTemplateParams } from "../shared/constants.ts";
+import { DEFAULT_OUTPUT, DEFAULT_VISUAL, allDefaultTemplateParams, defaultTemplateParams, TEMPLATE_META } from "../shared/constants.ts";
 import { api } from "./api.ts";
 import { AudioPanel } from "./components/AudioPanel.tsx";
 import { PreviewStage } from "./components/PreviewStage.tsx";
@@ -25,6 +25,10 @@ import { ExportPanel } from "./components/ExportPanel.tsx";
 import { ProjectPanel } from "./components/ProjectPanel.tsx";
 import { buildBeatTimeline } from "../engine/beat.ts";
 import { useBeatHint } from "./hooks/useBeatHint.ts";
+
+import { Icon } from "./components/Icon.tsx";
+
+import { InspectorTabs, type InspectorTab } from "./components/InspectorTabs.tsx";
 
 type Toast = { id: number; kind: "info" | "error" | "success"; text: string };
 
@@ -49,6 +53,7 @@ function loadLastSession(): LastSession | null {
 }
 
 export const App: React.FC = () => {
+  const [inspector, setInspector] = useState<InspectorTab>("appearance");
   const restored = useRef<LastSession | null>(loadLastSession());
 
   const [audioList, setAudioList] = useState<AudioEntry[]>([]);
@@ -424,12 +429,13 @@ export const App: React.FC = () => {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark">◍</span>
+          <span className="brand-mark"><Icon name="wave" size={22} /></span>
           <div>
             <h1>WaveMotion</h1>
-            <p>音乐动态背景工作台</p>
+            <p>STUDIO</p>
           </div>
         </div>
+        <div className="workspace-path"><span>工作空间</span><Icon name="chevron" size={12} /><strong>{selectedAudio?.name ?? "未选择音频"}</strong></div>
         <div className="header-meta">
           {analysis && (
             <>
@@ -448,12 +454,17 @@ export const App: React.FC = () => {
             </>
           )}
           {analyzing && <span className="pill pill-busy">分析中…</span>}
+          <button className="btn header-export" onClick={() => {
+            setInspector("export");
+            requestAnimationFrame(() => document.getElementById("tab-export")?.scrollIntoView({block: "nearest"}));
+          }}><Icon name="download" />导出</button>
         </div>
       </header>
 
       <div className="app-body">
         {/* 左侧：音频 + 模板 */}
-        <aside className="sidebar-left">
+        <aside className="sidebar-left" aria-label="资源库">
+          <div className="sidebar-heading"><Icon name="wave" /><span>资源库</span><span className="section-count">{audioList.length}</span></div>
           <AudioPanel
             audioList={audioList}
             selectedId={selectedId}
@@ -465,7 +476,7 @@ export const App: React.FC = () => {
           />
           <div className="panel-section">
             <div className="panel-head">
-              <h2>视觉模板</h2>
+              <h2>视觉模板</h2><span className="section-count">06</span>
             </div>
             <TemplatePicker value={visual.template} onChange={handleTemplateChange} />
           </div>
@@ -481,6 +492,7 @@ export const App: React.FC = () => {
 
         {/* 中央：预览 + 波形 + 传输控制 */}
         <main className="stage">
+          <div className="stage-toolbar"><div><span className="live-dot" />实时预览<span className="toolbar-divider" />{TEMPLATE_META.find(t => t.id === visual.template)?.name}</div><span className="mono">{spec.width} × {spec.height}<span className="toolbar-divider" />{spec.fps} FPS</span></div>
           {analysisError && <div className="banner banner-error">{analysisError}</div>}
           <div className="stage-preview">
             <PreviewStage
@@ -496,6 +508,7 @@ export const App: React.FC = () => {
               onSeekHandled={() => setSeekRequest(null)}
             />
           </div>
+          <div className="timeline-heading"><span>音频时间轴</span><span className="mono">{selectedAudio?.name ?? "等待音频"}</span></div>
           {analysis && beatTimeline && (
             <TimelineScrubber
               analysis={analysis}
@@ -524,7 +537,14 @@ export const App: React.FC = () => {
         </main>
 
         {/* 右侧：参数 */}
-        <aside className="sidebar-right">
+        <aside className="sidebar-right" aria-label="检查器">
+          <div className="sidebar-heading"><Icon name="sliders" /><span>检查器</span></div>
+          <InspectorTabs
+            value={inspector}
+            onChange={setInspector}
+            rendering={jobs.some(job => job.status === "running")}
+          />
+          <div id="panel-appearance" role="tabpanel" tabIndex={0} aria-labelledby="tab-appearance" hidden={inspector !== "appearance"}>
           <div className="section">
             <h3 className="section-title">常用参数</h3>
             <PalettePicker
@@ -573,6 +593,9 @@ export const App: React.FC = () => {
             onChange={handleParamChange}
           />
 
+          </div>
+          <div id="panel-rhythm" role="tabpanel" tabIndex={0} aria-labelledby="tab-rhythm" hidden={inspector !== "rhythm"}>
+          {!analysis && <p className="empty-note inspector-empty">选择音频并完成分析后，可校正节奏。</p>}
           {analysis && (
             <RhythmPanel
               analysis={analysis}
@@ -582,6 +605,8 @@ export const App: React.FC = () => {
             />
           )}
 
+          </div>
+          <div id="panel-export" role="tabpanel" tabIndex={0} aria-labelledby="tab-export" hidden={inspector !== "export"}>
           <ExportPanel
             output={output}
             onOutputChange={setOutput}
@@ -593,10 +618,12 @@ export const App: React.FC = () => {
             onClearFinished={handleClearFinished}
             exporting={false}
           />
+          </div>
+          <div className="inspector-footer"><span className="live-dot" />本地工作空间<span>WaveMotion Studio</span></div>
         </aside>
       </div>
 
-      <div className="toast-stack">
+      <div className="toast-stack" role="status" aria-live="polite">
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.kind}`}>
             {t.text}

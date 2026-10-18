@@ -23,3 +23,7 @@ macOS 的构建缓存和 `.app` 位于 `~/Library/Caches/WaveMotion/build/darwin
 用户数据由 Electron `app.getPath('userData')/data` 管理。菜单“文件”可打开数据与日志目录，下载成片或项目 JSON 时使用原生保存对话框。应用不开放 Node 到页面，不允许窗口导航到外部来源；后台拒绝外部 Origin 和非本机 Host。
 
 开发安装包文件名带 `-dev`，不自动升级项目版本，也不会发布到 GitHub Release。正式发版遵循根目录 CONTRIBUTING.md，集中在 dev 更新版本、验收后再合入 main；`npm run desktop:package -- --release` 可生成不带开发标记的候选安装包。当前本机测试包未使用 Developer ID 签名和 Apple 公证；对外正式发行需配置签名/公证凭据。
+
+## Windows CI
+
+GitHub Actions 的 `Windows Desktop` 工作流在 Windows x64 runner 上冻结分析器并生成 NSIS 安装器；推送 `dev` / `codex/**`、发起到 `dev` / `main` 的 PR，或手动运行均会触发。成功后从该次运行的 `WaveMotion-windows-x64-dev-*` artifact 下载 `.exe`，运行后选择安装目录。CI 会检查类型、独立后台、进程退出、包内分析器和媒体工具。安装包目前没有 Windows 代码签名，也不会自动发布 Release。
