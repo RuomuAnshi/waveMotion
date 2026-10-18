@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * 验收：预览（Player / renderStill）与成片（renderMedia）在同一帧完全一致。
+ * 验收：预览（renderStill）与成片（renderMedia）在同一次渲染里产出同一帧。
  *
- * 做法：
- *  1. 用 renderStill 单独渲染目标帧 -> still.png（等价于预览所用的 Composition）
- *  2. 用 renderMedia 渲染同一 Composition 的短区间成片 -> clip.mp4
- *  3. 用 ffmpeg 抽出该帧 -> from-mp4.png
- *  4. 逐像素比较（记录 PSNR / 最大绝对差）
+ * 判定方式（不假设偏移，直接测出来）：
+ *  1. renderStill 渲染目标帧 F  -> still.png
+ *  2. renderMedia 渲染区间 [F-2, F+2] -> clip.mp4（5 帧）
+ *  3. 抽出全部 5 帧，与 still.png 逐帧比对 PSNR
+ *  4. 要求「最匹配的一帧」正好落在区间内的第 2 个位置（即帧 F），
+ *     且 PSNR ≥ 40 dB。若最匹配位置不是 F，说明成片帧序错位——这是真 bug，
+ *     会明确报出来；若位置对但 PSNR 低，说明画面本身不一致。
  *
- * 若两者相差极小（仅编码损耗），说明预览与成片同源、无随机抖动。
+ * 这样既验证了「同帧一致」，也顺带验证了「帧序对齐」。
  */
 import { bundle } from "@remotion/bundler";
 import { selectComposition, renderStill, renderMedia } from "@remotion/renderer";
@@ -19,7 +21,6 @@ import path from "node:path";
 import { ROOT, analyzeFile, resolveChrome, sampleAudioPath } from "./lib/env.mjs";
 
 const chrome = resolveChrome();
-// 每次运行用独立目录，避免并发运行时互相覆盖中间产物
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), "wm-framematch-"));
 
 const analysis = analyzeFile(sampleAudioPath(), path.join(OUT, "analysis.json"));
@@ -43,15 +44,14 @@ const visual = {
   templateParams: {},
 };
 
-const inputProps = {
-  analysis,
-  visual,
-  output: { width: 1920, height: 1080, fps, totalFrames },
-};
+const inputProps = { analysis, visual, output: { width: 1920, height: 1080, fps, totalFrames } };
 
-// 与生产导出保持一致的 GL 后端（renderService 默认 angle：整片画面完整）
 const gl = process.env.WM_GL || "angle";
-console.log(`bundle... (template=${template}, frame=${targetFrame}, gl=${gl})`);
+const FROM = Math.max(0, targetFrame - 2);
+const TO = Math.min(totalFrames - 1, targetFrame + 2);
+const expectedIndex = targetFrame - FROM;
+
+console.log(`bundle... (template=${template}, frame=${targetFrame}, range=[${FROM},${TO}], gl=${gl})`);
 const serveUrl = await bundle({ entryPoint: path.join(ROOT, "src/remotion/root.tsx") });
 const composition = await selectComposition({
   serveUrl,
@@ -60,7 +60,7 @@ const composition = await selectComposition({
   inputProps,
 });
 
-// 1) 静帧
+// 1) 静帧（等价于预览所用的 Composition 在同一帧的画面）
 const stillPath = path.join(OUT, "still.png");
 await renderStill({
   composition,
@@ -72,10 +72,8 @@ await renderStill({
   chromiumOptions: { gl },
 });
 
-// 2) 只渲染目标帧附近的短区间成片
+// 2) 同一 Composition 的短区间成片
 const clipPath = path.join(OUT, "clip.mp4");
-const from = targetFrame;
-const to = targetFrame + 1;
 await renderMedia({
   composition,
   serveUrl,
@@ -89,35 +87,67 @@ await renderMedia({
   muted: true,
   audioCodec: null,
   chromiumOptions: { gl },
-  frameRange: [from, to],
+  frameRange: [FROM, TO],
   inputProps,
 });
 
-// 3) 抽帧
-const mp4Frame = path.join(OUT, "from-mp4.png");
-execFileSync("/opt/homebrew/bin/ffmpeg", ["-y", "-loglevel", "error", "-i", clipPath, "-vf", "select=eq(n\\,0)", "-vsync", "0", "-frames:v", "1", mp4Frame], { stdio: "pipe" });
+// 3) 抽出区间内全部帧
+const framesDir = path.join(OUT, "frames");
+fs.mkdirSync(framesDir, { recursive: true });
+execFileSync(
+  "/opt/homebrew/bin/ffmpeg",
+  ["-y", "-loglevel", "error", "-i", clipPath, "-vf", "format=rgb24", "-f", "image2", path.join(framesDir, "m-%02d.png")],
+  { stdio: "pipe" },
+);
+const extracted = fs.readdirSync(framesDir).filter((f) => /^m-\d+\.png$/.test(f)).sort();
+if (extracted.length !== TO - FROM + 1) {
+  console.error(`❌ 成片帧数不符：期望 ${TO - FROM + 1} 帧，实际 ${extracted.length} 帧`);
+  process.exit(1);
+}
 
-// 4) 比较
+// 4) 与静帧逐帧比对
 const pyScript = `
-import sys, numpy as np
+import sys, json, numpy as np
 from PIL import Image
 a = np.asarray(Image.open(sys.argv[1]).convert("RGB"), dtype=np.float64)
-b = np.asarray(Image.open(sys.argv[2]).convert("RGB"), dtype=np.float64)
-if a.shape != b.shape:
-    print("SIZE_MISMATCH", a.shape, b.shape); sys.exit(2)
-diff = np.abs(a - b)
-mse = float(np.mean((a - b) ** 2))
-psnr = float("inf") if mse == 0 else 10 * np.log10(255.0 ** 2 / mse)
-print(f"max_abs_diff={diff.max():.2f}")
-print(f"mean_abs_diff={diff.mean():.4f}")
-print(f"psnr={psnr:.2f}")
-print(f"pixels_over_2={int((diff.max(axis=2) > 2).sum())}")
-print(f"total_pixels={a.shape[0]*a.shape[1]}")
+res = []
+for i, p in enumerate(sys.argv[2:]):
+    b = np.asarray(Image.open(p).convert("RGB"), dtype=np.float64)
+    if a.shape != b.shape:
+        res.append({"idx": i, "psnr": -1, "max": 999, "note": "size_mismatch"})
+        continue
+    d = np.abs(a - b)
+    mse = float((d ** 2).mean())
+    psnr = 99.99 if mse == 0 else float(10 * np.log10(255.0 ** 2 / mse))
+    res.append({"idx": i, "psnr": round(psnr, 2), "max": float(d.max())})
+print(json.dumps(res))
 `;
-const pyOut = execFileSync(".venv/bin/python", ["-c", pyScript, stillPath, mp4Frame], { encoding: "utf8" });
-console.log(pyOut.trim());
+const rows = JSON.parse(
+  execFileSync(
+    ".venv/bin/python",
+    ["-c", pyScript, stillPath, ...extracted.map((f) => path.join(framesDir, f))],
+    { encoding: "utf8" },
+  ).trim(),
+);
 
-const psnr = Number(/psnr=([\d.]+)/.exec(pyOut)?.[1] ?? 0);
-const pass = psnr >= 40;
-console.log(pass ? "✅ 预览与成片同帧一致（PSNR ≥ 40 dB，仅编码损耗）" : "❌ 预览与成片存在明显差异");
-process.exit(pass ? 0 : 1);
+console.log(`静帧 frame ${targetFrame} vs 成片 5 帧（期望最匹配位置 = ${expectedIndex}）:`);
+rows.forEach((r) => {
+  const pos = FROM + r.idx;
+  const mark = r.idx === expectedIndex ? " ← 期望" : "";
+  console.log(`  成片第 ${r.idx} 帧 (frame ${pos}): psnr=${r.psnr.toFixed(2)}dB max=${r.max}${mark}`);
+});
+
+const best = rows.reduce((a, b) => (b.psnr > a.psnr ? b : a), rows[0]);
+const bestPos = FROM + best.idx;
+const alignmentOk = best.idx === expectedIndex;
+const qualityOk = best.psnr >= 40;
+
+console.log("");
+if (!alignmentOk) {
+  console.log(`❌ 帧序错位：最匹配的是成片第 ${best.idx} 帧 (frame ${bestPos})，期望第 ${expectedIndex} 帧 (frame ${targetFrame})`);
+} else if (!qualityOk) {
+  console.log(`❌ 预览与成片存在明显差异：PSNR ${best.psnr.toFixed(2)} dB < 40 dB`);
+} else {
+  console.log(`✅ 预览与成片同帧一致（frame ${targetFrame} → 成片第 ${best.idx} 帧，PSNR ${best.psnr.toFixed(2)} dB ≥ 40 dB，仅编码损耗）`);
+}
+process.exit(alignmentOk && qualityOk ? 0 : 1);
