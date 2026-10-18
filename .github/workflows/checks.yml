@@ -1,0 +1,62 @@
+name: Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: python/requirements.txt
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          npm ci
+          python -m pip install -r python/requirements.txt
+      - name: Typecheck and build
+        run: |
+          npm run typecheck
+          npm run build
+      - name: Audio, rhythm, cache and reference regressions
+        run: |
+          npm run verify:audio-regressions
+          npm run verify:reference-style
+          npm run verify:acceptance:bpm
+      - name: Create temporary audio fixture for browser checks
+        run: |
+          mkdir -p assets
+          python - <<'PY'
+          import numpy as np
+          import soundfile as sf
+          sr = 44100
+          t = np.arange(sr * 8) / sr
+          y = .2 * np.sin(2 * np.pi * 440 * t) * np.exp(-np.mod(t, .5) * 15)
+          sf.write('assets/wav.wav', np.column_stack([y, y]), sr)
+          PY
+      - name: Browser playback and template checks
+        run: |
+          npm run dev > "$RUNNER_TEMP/wavemotion-dev.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5179/ > /dev/null && curl --fail --silent http://127.0.0.1:3210/api/audio > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          export WAVEMOTION_CHROME="$(command -v google-chrome || command -v chromium)"
+          npm run verify:acceptance:ui
+      - name: Print server diagnostics on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/wavemotion-dev.log" 2>/dev/null || true

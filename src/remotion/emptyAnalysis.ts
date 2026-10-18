@@ -1,8 +1,9 @@
 import type { AudioAnalysis } from "../shared/types.ts";
+import { ANALYSIS_VERSION } from "../shared/types.ts";
 
 /** 占位分析：仅用于 Studio/类型默认值，不会出现在真实渲染里 */
 export const EMPTY_ANALYSIS: AudioAnalysis = {
-  analysisVersion: "analysis-v1",
+  analysisVersion: ANALYSIS_VERSION,
   audioId: "",
   durationSec: 10,
   sampleRate: 44100,

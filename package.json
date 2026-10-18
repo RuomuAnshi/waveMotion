@@ -23,7 +23,8 @@
     "verify:acceptance:project": "node tests/acceptance-project.mjs",
     "verify:acceptance:ui": "node tests/acceptance-ui.mjs",
     "verify:acceptance:integrity": "node tests/acceptance-integrity.mjs",
-    "verify:reference-style": "tsx tests/reference-style.ts"
+    "verify:reference-style": "tsx tests/reference-style.ts",
+    "verify:audio-regressions": "tsx tests/audio-regressions.ts && tsx scripts/verify-python-regressions.ts"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.4",

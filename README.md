@@ -115,6 +115,8 @@ npm start          # → http://127.0.0.1:3210
 
 分析始终使用**降采样单声道副本**；播放和导出**保留原音频的声道与内容**。结果按「音频内容 + 分析版本」缓存，切换模板、改颜色、调强度都不会触发重新分析。
 
+当前分析版本为 `analysis-v2`：频谱按逐帧顺序输出，低／中／高频使用非负幅度归一化。旧版本缓存会自动失效并重新分析，无需删除原素材或项目。M4A、AAC、WebM 等 libsndfile 无法读取的格式会通过 FFprobe 读取原始元数据，再由 FFmpeg 解码分析副本；支持 `WAVEMOTION_FFMPEG` 和 `WAVEMOTION_FFPROBE` 指定可执行文件。
+
 ### 同步规则
 
 - **自动模式**直接使用检测到的拍点，而不是按平均 BPM 匀速播放——真实的音乐不是节拍器
@@ -228,6 +230,7 @@ npm run verify:acceptance:engine      # 动画逻辑确定性：513 帧逐字段
 npm run verify:acceptance:determinism  # 像素确定性：同帧重复渲染 + 跳帧渲染（视觉等价容差）
 npm run verify:acceptance:integrity    # 整片画面完整性：逐帧扫描丢条带
 npm run verify:reference-style         # 参考风格行为 + 横竖屏黑底与缺条带区分
+npm run verify:audio-regressions       # 频谱时间定位、频段响应、容器解码、拍点配对、缓存版本与配色
 npm run verify:acceptance:outputs      # 5 组输出规格 + 队列/取消/重试（需先启动服务）
 npm run verify:acceptance:project      # 项目配置保存/载入/导入导出（需先启动服务）
 npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆（需先启动服务）

@@ -69,8 +69,12 @@ export function buildBeatTimeline(analysis: AudioAnalysis, rhythm: RhythmConfig)
   }
 
   // ---- 自动模式 ----
-  let baseTimes = analysis.beatsSec.map((t) => t + offset).filter((t) => t >= 0 && t <= analysis.durationSec);
-  let baseStrengths = analysis.beatsSec.map((_, i) => analysis.beatStrengths?.[i] ?? analysis.rhythm.beatStrengths?.[i] ?? 0.8);
+  const shiftedBeats = analysis.beatsSec.map((t, i) => ({
+    time: t + offset,
+    strength: analysis.beatStrengths?.[i] ?? analysis.rhythm.beatStrengths?.[i] ?? 0.8,
+  })).filter(({ time }) => time >= 0 && time <= analysis.durationSec);
+  const baseTimes = shiftedBeats.map(({ time }) => time);
+  const baseStrengths = shiftedBeats.map(({ strength }) => strength);
 
   // 检测不可靠时退回 BPM 网格，避免画面完全没有拍点
   if (baseTimes.length < 2 && analysis.bpm > 0) {
