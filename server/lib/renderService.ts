@@ -76,6 +76,7 @@ function sourceKey(): string {
 }
 
 export async function getServeUrl(onProgress?: (p: number) => void): Promise<string> {
+  if (process.env.WAVEMOTION_REMOTION_BUNDLE) return process.env.WAVEMOTION_REMOTION_BUNDLE;
   const key = sourceKey();
   if (cachedBundle && cachedBundle.key === key) return cachedBundle.url;
   const url = await bundle({
@@ -99,6 +100,8 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
   const { job, analysis, onProgress, onCancel, isCancelled } = opts;
   const snapshot = job.snapshot;
   const spec = snapshot;
+  const { cancel, cancelSignal } = makeCancelSignal();
+  onCancel(() => cancel());
   const browserExecutable = resolveBrowser();
   if (!browserExecutable) {
     throw new Error("未找到 Chrome / Chromium。请安装 Google Chrome，或设置环境变量 WAVEMOTION_CHROME 指向浏览器可执行文件。");
@@ -129,8 +132,7 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
     browserExecutable,
   });
 
-  const { cancel, cancelSignal } = makeCancelSignal();
-  onCancel(() => cancel());
+  if (isCancelled()) return undefined;
 
   // 视频轨道单独渲染（不含音轨）。画面完全由分析数据驱动，
   // 音轨随后用 ffmpeg 从原音频直接封装，保证不重编码、时长精确。
@@ -146,6 +148,7 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
     codec: "h264",
     outputLocation: videoOnlyPath,
     browserExecutable,
+    binariesDirectory: process.env.WAVEMOTION_BINARIES_DIR || null,
     pixelFormat: "yuv420p",
     // 指定 bt709 才会输出有限范围 (tv) 的 yuv420p；默认会得到 yuvj420p (full range)
     colorSpace: "bt709",

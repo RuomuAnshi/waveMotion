@@ -69,6 +69,12 @@ npm start          # → http://127.0.0.1:3210
 
 **选择音频 → 自动分析 → 选择模板 → 调整并预览 → 导出 MP4**
 
+### Electron 桌面版
+
+桌面版使用独立窗口和应用内本地服务，完整安装包内置音频分析器、FFmpeg 与渲染浏览器。构建前安装 `python/requirements-build.txt`，然后使用 `npm run desktop` 运行、`npm run desktop:package` 打包；详细说明见 [desktop/README.md](desktop/README.md)。应用数据保存在用户目录，原始音视频不会自动打进安装包。
+
+后续开发先推送到 `dev`；正式发版统一版本号并验收安装包后，再通过 `dev` → `main` PR 发布，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 ## 视觉模板
 
 六种模板共用同一套节拍与能量驱动系统，但画面语言各不相同：

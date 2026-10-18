@@ -386,10 +386,18 @@ def load_audio(in_path):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True)
-    ap.add_argument("--output", required=True)
+    ap.add_argument("--input")
+    ap.add_argument("--output")
+    ap.add_argument("--health", action="store_true")
     ap.add_argument("--version", default=ANALYSIS_VERSION)
     args = ap.parse_args()
+
+    if args.health:
+        import librosa, numpy, soundfile
+        print(json.dumps({"ok": True, "analysisVersion": ANALYSIS_VERSION}))
+        return 0
+    if not args.input or not args.output:
+        ap.error("--input and --output are required unless --health is used")
 
     t0 = time.time()
     import numpy as np

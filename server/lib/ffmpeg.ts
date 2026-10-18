@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { trackChild } from "./childProcesses.ts";
 
 /** 定位 ffmpeg / ffprobe：环境变量 > PATH */
 export function resolveFfmpegBin(): string {
@@ -222,7 +223,7 @@ export function fileExists(p: string): boolean {
 export function runFfmpeg(args: string[]): Promise<{ code: number; stderr: string }> {
   return new Promise((resolve) => {
     const bin = resolveFfmpegBin();
-    const child = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const child = trackChild(spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] }));
     let stderr = "";
     child.stderr.on("data", (d) => {
       stderr += String(d);
@@ -275,7 +276,7 @@ export function scanFrameIntegrity(
   const timeoutMs = options.timeoutMs ?? 10 * 60_000;
 
   return new Promise((resolve, reject) => {
-    const child = spawn(
+    const child = trackChild(spawn(
       bin,
       [
         "-v", "error",
@@ -285,7 +286,7 @@ export function scanFrameIntegrity(
         "-",
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
-    );
+    ));
 
     const ratios: number[] = [];
     const corrupt: number[] = [];

@@ -2,7 +2,7 @@ name: Checks
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
 permissions:
   contents: read
 jobs:
@@ -35,6 +35,10 @@ jobs:
           npm run verify:audio-regressions
           npm run verify:reference-style
           npm run verify:acceptance:bpm
+      - name: Desktop backend and lifecycle checks
+        run: |
+          npm run build:desktop -- --skip-runtime
+          npm run verify:desktop
       - name: Create temporary audio fixture for browser checks
         run: |
           mkdir -p assets
