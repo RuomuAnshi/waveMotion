@@ -132,6 +132,9 @@ export async function analyzeAudioFile(
 /** 把 python 的报错翻译成用户能看懂的中文提示 */
 function explainAnalysisError(detail: string, pythonBin: string, isolated: boolean): string {
   const text = detail.slice(-4000);
+  if (/未找到 FFmpeg|未找到 FFprobe/.test(text)) {
+    return "缺少音频解码工具，请安装 FFmpeg/FFprobe，或设置 WAVEMOTION_FFMPEG 和 WAVEMOTION_FFPROBE 指向可执行文件。";
+  }
   if (/ModuleNotFoundError|No module named 'librosa'/.test(text)) {
     return `音频分析依赖未安装。请运行 npm run setup:python 创建隔离环境（当前解释器：${pythonBin}${isolated ? "" : "，未找到 .venv"}）。`;
   }

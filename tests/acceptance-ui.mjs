@@ -3,6 +3,7 @@
  * 验收：真实浏览器里的界面行为（通过 CDP 驱动无头 Chrome）。
  *  - 模板参数按模板分别记忆，切回来时恢复
  *  - 刷新页面后从 localStorage 恢复当前模板参数
+ *  - 异步挂载后的播放／暂停／时间进度和定位同步
  *
  * 需要先启动服务（npm run dev 或 npm start）。
  */
@@ -114,6 +115,25 @@ try {
     rows.push(ok);
     console.log(`${ok ? "✅" : "❌"} ${name}${detail !== "" ? "  " + detail : ""}`);
   };
+
+  // Fresh page: Player does not exist on the initial render. Waiting for the
+  // actual preview catches effects that subscribe only before its async mount.
+  const previewReady = await waitFor(`!!document.querySelector(".preview-player-wrap")`, 60000);
+  check("音频分析后播放器成功挂载", previewReady);
+  if (!previewReady) throw new Error("播放器未加载，无法验证播放状态");
+  const timeText = () => evaluate(`document.querySelector(".transport-time .mono").textContent`);
+  await evaluate(`(() => { document.querySelector('.transport button[title="播放 / 暂停（空格）"]').click(); return true; })()`);
+  check("首次播放更新按钮和时间", await waitFor(`document.querySelector('.transport button[title="播放 / 暂停（空格）"]').textContent.includes("暂停") && document.querySelector(".transport-time .mono").textContent !== "0:00.00"`, 10000));
+  await evaluate(`(() => { document.querySelector('.transport button[title="播放 / 暂停（空格）"]').click(); return true; })()`);
+  check("暂停后按钮恢复播放", await waitFor(`document.querySelector('.transport button[title="播放 / 暂停（空格）"]').textContent.includes("播放")`));
+  await sleep(200);
+  const pausedAt = await timeText();
+  await sleep(400);
+  check("暂停后时间保持不变", (await timeText()) === pausedAt);
+  await evaluate(`(() => { document.querySelector('.transport button[title="前进 1 秒"]').click(); return true; })()`);
+  check("暂停时定位更新预览时间", await waitFor(`document.querySelector(".transport-time .mono").textContent !== ${JSON.stringify(pausedAt)}`));
+  await evaluate(`(() => { document.querySelector('.transport button[title="回到开头"]').click(); return true; })()`);
+  check("回到开头同步归零", await waitFor(`document.querySelector(".transport-time .mono").textContent === "0:00.00"`));
 
   // 1) 渐变脉冲：把「多边形边数」改成 8
   await clickTemplate("渐变几何脉冲");

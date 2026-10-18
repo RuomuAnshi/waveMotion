@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 import warnings
@@ -17,7 +19,7 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-ANALYSIS_VERSION = "analysis-v1"
+ANALYSIS_VERSION = "analysis-v2"
 # 时间序列采样率（Hz）。视频 fps 最高 60，此处用 60Hz 足够且插值平滑。
 SERIES_FPS = 60
 # 分析用降采样目标（单声道）
@@ -295,17 +297,21 @@ def frame_energy(rms_db, rms_norm, onset_env_norm, stft_mag, sr, times, duration
     gate_rs = np.interp(np.linspace(0, duration, band_norm.shape[1]), np.linspace(0, duration, len(gate)), gate)
     band_norm = band_norm * gate_rs[None, :]
 
-    spectrum_flat = []
-    for b in range(band_norm.shape[0]):
-        spectrum_flat.extend(resample_series(band_norm[b], times, duration, SERIES_FPS))
+    # Shared contract: frame f / band b lives at f * SPECTRUM_BANDS + b.
+    band_series = np.asarray([
+        resample_series(band, times, duration, SERIES_FPS) for band in band_norm
+    ])
+    spectrum_flat = band_series.T.reshape(-1).tolist()
 
     # ---- 低/中/高频 ----
     low = band_range_energy(stft_mag, sr, 30.0, LOW_CUT_HZ)
     mid = band_range_energy(stft_mag, sr, LOW_CUT_HZ, HIGH_CUT_HZ)
     high = band_range_energy(stft_mag, sr, HIGH_CUT_HZ, sr / 2.0)
-    low_n = normalize(20.0 * np.log10(low + 1e-9), 98.0)
-    mid_n = normalize(20.0 * np.log10(mid + 1e-9), 98.0)
-    high_n = normalize(20.0 * np.log10(high + 1e-9), 98.0)
+    # normalize() expects non-negative amplitudes. dB values may all be negative,
+    # which previously zeroed an entire band even when it contained audible sound.
+    low_n = normalize(low, 98.0)
+    mid_n = normalize(mid, 98.0)
+    high_n = normalize(high, 98.0)
     low_n = low_n * mute_curve(rms_norm)
     mid_n = mid_n * mute_curve(rms_norm)
     high_n = high_n * mute_curve(rms_norm)
@@ -319,6 +325,65 @@ def frame_energy(rms_db, rms_norm, onset_env_norm, stft_mag, sr, times, duration
     return spectrum_flat, low_ser, mid_ser, high_ser, rms_ser, rmsdb_ser, onset_ser
 
 
+def load_audio(in_path):
+    """Prefer libsndfile; use FFprobe + FFmpeg for containers such as M4A/AAC.
+
+    Only the analysis copy is downmixed/resampled. Report the original stream's
+    sample rate and channel count, and never modify the source file.
+    """
+    import numpy as np
+    import soundfile as sf
+    import librosa
+
+    try:
+        info = sf.info(str(in_path))
+        y, sr = librosa.load(str(in_path), sr=ANALYSIS_SR, mono=True)
+        return y, sr, int(info.samplerate), int(info.channels), float(info.duration)
+    except (RuntimeError, ValueError, OSError):
+        pass
+
+    probe_bin = os.environ.get("WAVEMOTION_FFPROBE") or "ffprobe"
+    decode_bin = os.environ.get("WAVEMOTION_FFMPEG") or "ffmpeg"
+    try:
+        probe = subprocess.run([
+            probe_bin, "-v", "error", "-select_streams", "a:0",
+            "-show_streams", "-show_format", "-of", "json", str(in_path),
+        ], check=True, capture_output=True, text=True, timeout=120)
+    except FileNotFoundError as exc:
+        raise ValueError("未找到 FFprobe，请安装 FFmpeg 或设置 WAVEMOTION_FFPROBE") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"无法读取音频: {exc.stderr.strip()[-500:]}") from exc
+    metadata = json.loads(probe.stdout)
+    streams = metadata.get("streams", [])
+    if not streams:
+        raise ValueError("无法读取音频: 文件没有音轨")
+    stream = streams[0]
+    orig_sr, channels = int(stream["sample_rate"]), int(stream["channels"])
+    if orig_sr <= 0 or channels <= 0:
+        raise ValueError("无法读取音频: 采样率或声道数无效")
+    raw_duration = stream.get("duration", metadata.get("format", {}).get("duration", 0))
+    try:
+        duration = float(raw_duration)
+    except (ValueError, TypeError):
+        duration = 0.0
+    try:
+        decoded = subprocess.run([
+            decode_bin, "-v", "error", "-i", str(in_path), "-map", "0:a:0",
+            "-ac", "1", "-ar", str(ANALYSIS_SR), "-f", "f32le", "pipe:1",
+        ], check=True, capture_output=True, timeout=600)
+    except FileNotFoundError as exc:
+        raise ValueError("未找到 FFmpeg，请安装 FFmpeg 或设置 WAVEMOTION_FFMPEG") from exc
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"音频解码失败: {exc.stderr.decode(errors='replace').strip()[-500:]}") from exc
+    y = np.frombuffer(decoded.stdout, dtype="<f4").copy()
+    if not np.isfinite(duration) or duration <= 0:
+        duration = y.size / ANALYSIS_SR
+    # AAC/Opus can decode an extra padded codec frame at the end. It is not part
+    # of the audio timeline when the container provides a valid shorter duration.
+    y = y[:max(0, int(round(duration * ANALYSIS_SR)))]
+    return y, ANALYSIS_SR, orig_sr, channels, duration
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True)
@@ -328,7 +393,6 @@ def main() -> int:
 
     t0 = time.time()
     import numpy as np
-    import soundfile as sf
     import librosa
 
     in_path = Path(args.input)
@@ -336,25 +400,15 @@ def main() -> int:
         print(json.dumps({"error": f"文件不存在: {in_path}"}), file=sys.stderr)
         return 2
 
-    # 原始文件信息（保留原始声道数/采样率用于预览导出）
     try:
-        info = sf.info(str(in_path))
-        orig_sr = int(info.samplerate)
-        orig_channels = int(info.channels)
-        orig_frames = int(info.frames)
-        duration = float(info.duration)
+        y, sr, orig_sr, orig_channels, duration = load_audio(in_path)
     except Exception as exc:  # noqa: BLE001
-        print(json.dumps({"error": f"无法读取音频: {exc}"}), file=sys.stderr)
+        print(json.dumps({"error": f"音频解码失败: {exc}"}), file=sys.stderr)
         return 3
     if duration <= 0.05:
         print(json.dumps({"error": "音频时长过短"}), file=sys.stderr)
         return 3
 
-    try:
-        y, sr = librosa.load(str(in_path), sr=ANALYSIS_SR, mono=True, duration=None)
-    except Exception as exc:  # noqa: BLE001
-        print(json.dumps({"error": f"音频解码失败: {exc}"}), file=sys.stderr)
-        return 3
     if y.size == 0:
         print(json.dumps({"error": "音频为空"}), file=sys.stderr)
         return 3

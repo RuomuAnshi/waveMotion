@@ -3,7 +3,7 @@
  * 修改这些类型时必须同步 python 分析脚本的输出结构（analysisVersion）。
  */
 
-export const ANALYSIS_VERSION = "analysis-v1" as const;
+export const ANALYSIS_VERSION = "analysis-v2" as const;
 
 /** 单个频谱频段的能量序列（0..1，已按时间轴重采样到 analysis.frameRate） */
 export interface TimeSeries {
