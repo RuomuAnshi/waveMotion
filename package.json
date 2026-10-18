@@ -5,13 +5,22 @@
   "type": "module",
   "description": "WaveMotion - local music-reactive background video maker built on Remotion",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev": "node scripts/dev.mjs",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
     "setup:python": "bash scripts/setup-python.sh",
     "typecheck": "tsc --noEmit",
     "verify:analysis": "tsx scripts/verify-analysis.ts",
-    "verify:render": "tsx scripts/verify-render.ts"
+    "verify:render": "tsx scripts/verify-render.ts",
+    "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev:web": "vite",
+    "verify:acceptance:bpm": "node tests/acceptance-bpm.mjs",
+    "verify:acceptance:edge": "node tests/acceptance-edge.mjs",
+    "verify:acceptance:frames": "node tests/acceptance-frame-match.mjs",
+    "verify:acceptance:determinism": "node tests/acceptance-determinism.mjs",
+    "verify:acceptance:outputs": "node tests/acceptance-outputs.mjs",
+    "verify:acceptance:project": "node tests/acceptance-project.mjs",
+    "verify:acceptance:ui": "node tests/acceptance-ui.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.4",

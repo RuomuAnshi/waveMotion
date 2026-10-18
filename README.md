@@ -52,11 +52,18 @@ npm run setup:python
 #    assets/wav.wav
 #    assets/背景.mp4     # 仅作为风格参考，不参与渲染
 
-# 4. 启动
+# 4. 启动（同时拉起 Fastify 本地服务与 Vite 前端）
 npm run dev
 ```
 
-打开终端里输出的地址（默认 `http://127.0.0.1:3210`）即可使用。
+打开终端里输出的地址（默认 `http://127.0.0.1:5179`）即可使用。
+
+生产模式则先构建再启动，由 Fastify 同时托管前端与接口：
+
+```bash
+npm run build
+npm start          # → http://127.0.0.1:3210
+```
 
 ### 使用流程
 
@@ -170,10 +177,11 @@ npm run dev
 wavemotion/
 ├── assets/                 # 本地素材（不进入版本库）
 ├── python/
-│   └── analyze.py          # librosa 离线分析，输出 analysis JSON
+│   ├── analyze.py          # librosa 离线分析，输出 analysis JSON
+│   └── requirements.txt    # 固定版本的分析依赖
 ├── server/                 # Fastify 本地服务
-│   ├── lib/                # 分析缓存、渲染队列、路径管理
-│   └── routes/             # audio / analyze / render / project 接口
+│   ├── lib/                # 分析缓存、渲染队列、路径管理、FFmpeg 封装
+│   └── routes/             # audio / analyze / render / project / system 接口
 ├── src/
 │   ├── shared/             # 前后端共享类型与常量
 │   ├── engine/             # 确定性场景驱动：随机、分析采样、拍点、帧场景
@@ -181,9 +189,38 @@ wavemotion/
 │   ├── remotion/           # Composition 入口（预览与导出共用）
 │   └── web/                # React 工作台界面
 ├── scripts/
-│   └── setup-python.sh     # 创建隔离 Python 环境
+│   ├── dev.mjs             # 同时启动服务与前端
+│   ├── setup-python.sh     # 创建隔离 Python 环境
+│   ├── verify-analysis.ts  # 自检：分析链路
+│   └── verify-render.ts    # 自检：渲染与封装链路
 └── data/                   # 运行时生成（分析缓存 / 导入素材 / 配置 / 成片）
 ```
+
+## 自检
+
+装好环境后可以先跑两个自检，确认分析链路和渲染链路都通：
+
+```bash
+npm run verify:analysis    # 调用真实分析管线，打印 BPM / 拍点 / 频谱
+npm run verify:render      # 渲染 2 秒样片并核对分辨率、编码、帧率、音轨
+npm run typecheck          # TypeScript 全量类型检查
+```
+
+## 验收脚本
+
+`tests/` 下是完整的验收脚本，覆盖 README 末尾「验收标准」里的每一条。它们会自己合成测试音频、自己启动渲染，不依赖 `data/` 里的历史产物。
+
+```bash
+npm run verify:acceptance:bpm          # 5 组已知 BPM 的合成击拍，比对检测精度
+npm run verify:acceptance:edge         # 半速/双速/手动偏移 + 静音/弱音/无节拍/损坏音频
+npm run verify:acceptance:frames       # 预览帧 vs 成片帧逐像素对比（PSNR）
+npm run verify:acceptance:determinism  # 同帧重复渲染 + 跳帧渲染，逐像素比对
+npm run verify:acceptance:outputs      # 5 组输出规格 + 队列/取消/重试（需先启动服务）
+npm run verify:acceptance:project      # 项目配置保存/载入/导入导出（需先启动服务）
+npm run verify:acceptance:ui           # 真实浏览器验证模板参数记忆（需先启动服务）
+```
+
+需要 `assets/wav.wav` 的脚本会在缺失时给出提示。Chrome 路径可以通过 `WAVEMOTION_CHROME` 覆盖，Python 通过 `WAVEMOTION_PYTHON` 覆盖。
 
 ## 验收标准
 
@@ -193,6 +230,31 @@ wavemotion/
 - 对比预览与导出的同一帧；重复渲染粒子画面验证确定性
 - 用 FFprobe 核对分辨率、帧率、时长、编码与音轨；验证取消、失败后可以重新导出
 - 人工检查动感、构图变化、背景留白与竖屏裁切，确保不是"只换配色"
+
+### 实测结果
+
+在 macOS（Node 24 / Python 3.12.13 / FFmpeg 8.1.2 / Chrome 无头）上跑完上述验收：
+
+| 项目 | 结果 |
+|---|---|
+| BPM 精度（5 组 90~140 BPM 合成击拍） | 最大误差 **0.033%**（要求 ≤ 1%） |
+| 校正后视觉触发误差 | **0.0000 帧**（要求 ≤ 1 帧） |
+| 预览帧 vs 成片帧（PSNR） | **46.91 dB**（阈值 40 dB） |
+| 确定性（同帧重复渲染 / 跳帧渲染） | 逐像素 **0 差异** |
+| 边界音频（半速 / 双速 / 偏移 / 静音 / 弱音 / 无节拍 / 损坏） | **9/9 通过** |
+| 输出规格（5 组比例×分辨率×帧率×音轨） | FFprobe 全部符合 |
+| 队列 / 取消 / 重复取消 / 重试 | 全部符合预期 |
+| 六模板样片（1080p30 + 音轨） | 全部导出成功，形态差异明显 |
+| 项目配置保存 / 载入 / 导入导出 | **20/20 通过** |
+
+## 实现说明
+
+- **音频分析**：librosa 的节拍追踪受 STFT hop 量化限制，解析度约 11.6 ms。分析阶段对拍点序号与时间做最小二乘线性回归重新估计速度，把 BPM 误差从 0.94% 降到 0.033%。
+- **节拍显著性**：单纯用拍点规律性判断会因为纯噪声也得到规整的伪拍点。分析会比较拍点位置与反拍位置的起音强度，得到「节拍重音是否明显」的独立指标，再与稳定性加权成置信度；不明显时主动提示用户手动校正。
+- **导出音轨**：视频用 Remotion 渲染为纯画面（H.264 / `yuv420p` / BT.709），再用 FFmpeg 以 `-c:v copy` 把原音频封装进去。这样既不二次编码视频，也不会因 Remotion 的音频路径产生时长漂移；成片时长严格等于帧数 / 帧率。
+- **像素格式**：Remotion 默认可能输出 `yuvj420p`（full range）。导出时显式指定 `colorSpace: "bt709"`，保证得到 `yuv420p` + TV range，兼容常见播放器与剪辑软件。
+- **确定性**：所有动画由「当前帧 + 分析数据 + 固定种子」纯函数计算，没有跨帧状态；粒子和隧道不依赖上一帧位置，因此可以随机跳帧渲染。
+- **渲染后端**：Chrome 的默认 `angle` 后端在同一帧重复渲染时会出现 ±4/255 的 GPU 光栅分块抖动（整幅画面呈水平条带，连纯渐变最小复现也会出现，与 `feTurbulence` 噪点无关）。实测 `egl` 后端 12 轮重复渲染逐像素 0 差异，且 1920×1080 渲染 30 帧比 `angle` 更快（5.9s vs 7.6s），因此导出默认使用 `gl: "egl"`；可用环境变量 `WAVEMOTION_GL` 覆盖（备选 `angle-egl`、`angle`）。
 
 ## 首版范围之外
 

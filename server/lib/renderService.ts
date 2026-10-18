@@ -10,6 +10,25 @@ import { ROOT_DIR } from "./paths.ts";
 
 const ENTRY_POINT = path.join(ROOT_DIR, "src/remotion/root.tsx");
 
+/**
+ * 渲染用 OpenGL 后端。
+ *
+ * 默认 egl：实测（macOS + 系统 Chrome）同帧重复渲染 12 轮逐像素完全一致，
+ * 且比默认的 angle 更快（1920x1080 30 帧 5.9s vs 7.6s）。angle 走 Metal 时
+ * 会偶发 ±4/255 的 GPU 光栅分块抖动，导致同一帧两次导出结果不同。
+ * 其他平台可通过 WAVEMOTION_GL 覆盖；若 egl 不可用可退回 angle-egl。
+ */
+const DEFAULT_GL = "egl";
+const VALID_GL = ["swangle", "angle", "egl", "swiftshader", "vulkan", "angle-egl"] as const;
+
+export type GlRenderer = NonNullable<Parameters<typeof renderMedia>[0]["chromiumOptions"]>["gl"];
+
+export function resolveGlRenderer(): GlRenderer {
+  const override = process.env.WAVEMOTION_GL?.trim();
+  if (override && (VALID_GL as readonly string[]).includes(override)) return override as GlRenderer;
+  return DEFAULT_GL;
+}
+
 /** 系统 Chrome 路径候选（macOS / Linux / Windows） */
 const CHROME_CANDIDATES = [
   process.env.WAVEMOTION_CHROME,
@@ -126,7 +145,7 @@ export async function executeRender(opts: RenderExecutionOptions): Promise<Rende
     imageFormat: "png",
     crf: 18,
     muted: true,
-    chromiumOptions: { gl: "angle" },
+    chromiumOptions: { gl: resolveGlRenderer() },
     concurrency: null,
     cancelSignal,
     onProgress: ({ progress }) => {
