@@ -26,4 +26,6 @@ macOS 的构建缓存和 `.app` 位于 `~/Library/Caches/WaveMotion/build/darwin
 
 ## Windows CI
 
-GitHub Actions 的 `Windows Desktop` 工作流在 Windows x64 runner 上冻结分析器并生成 NSIS 安装器；推送 `dev` / `codex/**`、发起到 `dev` / `main` 的 PR，或手动运行均会触发。成功后从该次运行的 `WaveMotion-windows-x64-dev-*` artifact 下载 `.exe`，运行后选择安装目录。CI 会检查类型、独立后台、进程退出、包内分析器和媒体工具。安装包目前没有 Windows 代码签名，也不会自动发布 Release。
+GitHub Actions 的 `Windows Desktop` 工作流在 Windows x64 runner 上冻结分析器并生成 NSIS 安装器；推送 `main` / `dev` / `codex/**`、发起到 `dev` / `main` 的 PR，或手动运行均会触发。成功后从该次运行的 `WaveMotion-windows-x64-dev-*` artifact 下载 `.exe`，运行后选择安装目录。CI 会检查类型、独立后台、进程退出、包内分析器和媒体工具。安装包目前没有 Windows 代码签名，也不会自动发布 Release。
+
+面向 `main` 的发版 PR 及 `main` 提交会使用 `--release` 构建，产物文件名移除 `-dev`，Actions artifact 标记为 `release`；其余分支仍产出 `dev` 测试包。此命名不会自动创建 Git 标签或 GitHub Release。

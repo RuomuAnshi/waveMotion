@@ -1,7 +1,7 @@
 {
   "name": "wavemotion",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "WaveMotion - local music-reactive background video maker built on Remotion",
   "scripts": {

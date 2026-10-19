@@ -2,7 +2,7 @@ name: Windows Desktop
 on:
   workflow_dispatch:
   push:
-    branches: [dev, 'codex/**']
+    branches: [main, dev, 'codex/**']
   pull_request:
     branches: [dev, main]
 permissions:
@@ -36,7 +36,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Build self-contained Windows installer
-        run: npm run desktop:package
+        env:
+          RELEASE_PACKAGE: ${{ github.base_ref == 'main' || github.ref == 'refs/heads/main' }}
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_PACKAGE -eq 'true') {
+            npm run desktop:package -- --release
+          } else {
+            npm run desktop:package
+          }
       - name: Verify desktop backend and process lifecycle
         run: npm run verify:desktop
       - name: Verify bundled analyzer and media tools
@@ -56,7 +64,7 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: WaveMotion-windows-x64-dev-${{ github.run_number }}
+          name: WaveMotion-windows-x64-${{ (github.base_ref == 'main' || github.ref == 'refs/heads/main') && 'release' || 'dev' }}-${{ github.run_number }}
           path: desktop-release/*.exe
           if-no-files-found: error
           retention-days: 14
