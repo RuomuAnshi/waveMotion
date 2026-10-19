@@ -122,8 +122,8 @@ export const MirrorSpectrum: React.FC<{ scene: Scene }> = ({ scene }) => {
       <svg width={W} height={H} style={{ position: "absolute", inset: 0, transform: `scale(${scale})`, transformOrigin: `${cx}px ${baseline}px` }}>
         <defs>
           <linearGradient id="ms-bar-up" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={palette.accent} stopOpacity={0.98} />
-            <stop offset="42%" stopColor={palette.secondary} stopOpacity={0.92} />
+            <stop offset="0%" stopColor={mixColor(palette.accent, palette.secondary, 0.35)} stopOpacity={0.8} />
+            <stop offset="42%" stopColor={palette.secondary} stopOpacity={0.9} />
             <stop offset="100%" stopColor={palette.primary} stopOpacity={0.6} />
           </linearGradient>
           <linearGradient id="ms-bar-down" x1="0" y1="0" x2="0" y2="1">
