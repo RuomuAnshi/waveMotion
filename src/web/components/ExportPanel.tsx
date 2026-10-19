@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import type { OutputConfig, RenderJob } from "../../shared/types.ts";
 import { resolveOutputSpec } from "../../shared/types.ts";
 
+import { Icon } from "./Icon.tsx";
+
 interface ExportPanelProps {
   output: OutputConfig;
   onOutputChange: (output: OutputConfig) => void;
@@ -113,7 +115,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
       </div>
 
       <button className="btn btn-primary btn-block btn-lg" onClick={onExport}>
-        ⬇ 导出 MP4
+        <Icon name="download" />导出 MP4
       </button>
 
       <div className="job-list">

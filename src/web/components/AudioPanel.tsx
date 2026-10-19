@@ -1,6 +1,8 @@
 import React, { useRef } from "react";
 import type { AudioEntry } from "../../shared/types.ts";
 
+import { Icon } from "./Icon.tsx";
+
 interface AudioPanelProps {
   audioList: AudioEntry[];
   selectedId: string | null;
@@ -37,13 +39,13 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
   return (
     <div className="panel-section">
       <div className="panel-head">
-        <h2>音频</h2>
+        <h2>音频素材</h2>
         <div className="panel-head-actions">
           <button className="btn btn-tiny" onClick={onRefresh} title="重新扫描 assets 与导入目录">
             刷新
           </button>
           <button className="btn btn-tiny btn-primary" onClick={() => fileRef.current?.click()} disabled={importing}>
-            {importing ? "导入中…" : "导入"}
+            <Icon name="plus" size={12} />{importing ? "导入中…" : "导入"}
           </button>
         </div>
       </div>
@@ -64,9 +66,10 @@ export const AudioPanel: React.FC<AudioPanelProps> = ({
           <li key={item.id}>
             <button
               className={`audio-item${selectedId === item.id ? " active" : ""}`}
+              aria-pressed={selectedId === item.id}
               onClick={() => onSelect(item.id)}
             >
-              <span className="audio-item-icon">{selectedId === item.id && analyzing ? "◌" : "♪"}</span>
+              <span className={`audio-item-icon${selectedId === item.id && analyzing ? " is-analyzing" : ""}`}><Icon name="music" size={16} /></span>
               <span className="audio-item-main">
                 <span className="audio-item-name" title={item.name}>
                   {item.name}

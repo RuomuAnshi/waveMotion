@@ -32,3 +32,9 @@ probe/
 # macOS AppleDouble metadata (exFAT volumes)
 ._*
 _t/
+
+# desktop build products and downloaded runtimes
+desktop-runtime/
+desktop-release/
+desktop-build/
+*.spec

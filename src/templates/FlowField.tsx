@@ -40,7 +40,7 @@ export const FlowField: React.FC<{ scene: Scene }> = ({ scene }) => {
   const ripples: React.ReactNode[] = [];
   if (beat.index >= 0 && rippleAmt > 0.02) {
     for (let k = 0; k < 3; k++) {
-      const tt = (beatAge - k * 0.125) / 1.5;
+      const tt = (beatAge - k * 0.2) / 1.5;
       if (tt <= 0 || tt >= 1) continue;
       const r = unit * (0.06 + tt * 0.95);
       const a = Math.pow(1 - tt, 1.5) * 0.3 * rippleAmt * (0.55 + beat.strength * 0.65);

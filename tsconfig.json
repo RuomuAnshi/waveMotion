@@ -17,5 +17,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "server", "scripts", "vite.config.ts", "remotion.config.ts"]
+  "include": ["src", "server", "scripts", "desktop/**/*.ts", "vite.config.ts", "remotion.config.ts"]
 }

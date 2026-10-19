@@ -1,7 +1,7 @@
 {
   "name": "wavemotion",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "WaveMotion - local music-reactive background video maker built on Remotion",
   "scripts": {
@@ -24,7 +24,11 @@
     "verify:acceptance:ui": "node tests/acceptance-ui.mjs",
     "verify:acceptance:integrity": "node tests/acceptance-integrity.mjs",
     "verify:reference-style": "tsx tests/reference-style.ts",
-    "verify:audio-regressions": "tsx tests/audio-regressions.ts && tsx scripts/verify-python-regressions.ts"
+    "verify:audio-regressions": "tsx tests/audio-regressions.ts && tsx scripts/verify-python-regressions.ts",
+    "build:desktop": "node scripts/build-desktop.mjs",
+    "desktop": "node scripts/electron-dev.mjs",
+    "desktop:package": "node scripts/package-desktop.mjs",
+    "verify:desktop": "node tests/desktop-runtime.cjs && tsx tests/desktop-processes.ts && node tests/desktop-backend.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.4",
@@ -43,6 +47,10 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
     "cross-env": "^10.1.0",
+    "electron": "44.9.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "ffmpeg-static": "5.3.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
@@ -53,5 +61,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/RuomuAnshi/waveMotion.git"
-  }
+  },
+  "main": "desktop/main.cjs",
+  "productName": "WaveMotion"
 }

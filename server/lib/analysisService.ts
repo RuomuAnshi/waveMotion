@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AudioAnalysis } from "../../src/shared/types.ts";
 import { ANALYSIS_VERSION } from "../../src/shared/types.ts";
-import { VENV_PYTHON, VENV_PYTHON_WIN, PYTHON_SCRIPT, ANALYSIS_CACHE_DIR, TMP_DIR, ensureDir, readJson, resolvePython, writeJsonAtomic } from "./paths.ts";
+import { trackChild } from "./childProcesses.ts";
+import { VENV_PYTHON, VENV_PYTHON_WIN, PYTHON_SCRIPT, ANALYSIS_CACHE_DIR, TMP_DIR, ensureDir, readJson, resolveAnalyzer, writeJsonAtomic } from "./paths.ts";
 
 export interface AnalysisResult {
   analysis: AudioAnalysis;
@@ -33,7 +34,7 @@ export function loadCachedAnalysis(filePath: string): AudioAnalysis | null {
 }
 
 function debugEnv(): NodeJS.ProcessEnv {
-  const py = resolvePython();
+  const py = resolveAnalyzer();
   return {
     ...process.env,
     PYTHONIOENCODING: "utf-8",
@@ -69,7 +70,7 @@ export async function analyzeAudioFile(
     }
   }
   const key = analysisCacheKey(filePath);
-  const py = resolvePython();
+  const py = resolveAnalyzer();
   ensureDir(ANALYSIS_CACHE_DIR);
   ensureDir(TMP_DIR);
   const outPath = path.join(TMP_DIR, `analysis-${key}.json`);
@@ -80,11 +81,11 @@ export async function analyzeAudioFile(
   env.TMPDIR = env.TMPDIR || "/tmp";
 
   const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
-    const child = spawn(py.bin, [PYTHON_SCRIPT, "--input", filePath, "--output", outPath], {
+    const child = trackChild(spawn(py.bin, [...py.args, "--input", filePath, "--output", outPath], {
       env,
       stdio: ["ignore", "pipe", "pipe"],
-      cwd: path.dirname(PYTHON_SCRIPT),
-    });
+      cwd: py.bundled ? path.dirname(py.bin) : path.dirname(PYTHON_SCRIPT),
+    }));
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d) => {
@@ -110,7 +111,9 @@ export async function analyzeAudioFile(
 
   if (result.code !== 0) {
     const detail = (result.stderr || result.stdout || "").trim();
-    throw new Error(explainAnalysisError(detail, py.bin, py.isolated));
+    throw new Error(py.bundled && /ModuleNotFoundError/.test(detail)
+      ? "桌面音频分析运行时不完整，请重新安装应用。"
+      : explainAnalysisError(detail, py.bin, py.isolated));
   }
 
   const analysis = readJson<AudioAnalysis>(outPath);
@@ -149,12 +152,12 @@ function explainAnalysisError(detail: string, pythonBin: string, isolated: boole
 
 /** 检查 python 环境是否就绪 */
 export async function checkPythonEnvironment(): Promise<{ ok: boolean; bin: string; message: string }> {
-  const py = resolvePython();
+  const py = resolveAnalyzer();
   const exists = fs.existsSync(VENV_PYTHON) || fs.existsSync(VENV_PYTHON_WIN);
   return new Promise((resolve) => {
-    const child = spawn(py.bin, ["-c", "import librosa, numpy, soundfile; print('ok')"], {
+    const child = trackChild(spawn(py.bin, py.bundled ? ["--health"] : ["-c", "import librosa, numpy, soundfile; print('ok')"], {
       env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-    });
+    }));
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += String(d)));
@@ -163,6 +166,8 @@ export async function checkPythonEnvironment(): Promise<{ ok: boolean; bin: stri
     child.on("close", (code) => {
       if (code === 0 && out.includes("ok")) {
         resolve({ ok: true, bin: py.bin, message: `Python 环境就绪（${py.bin}）` });
+      } else if (py.bundled) {
+        resolve({ ok: false, bin: py.bin, message: `桌面音频分析运行时不可用：${(err || out).trim().slice(-300)}` });
       } else if (!exists) {
         resolve({
           ok: false,

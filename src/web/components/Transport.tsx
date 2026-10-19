@@ -1,5 +1,7 @@
 import React from "react";
 
+import { Icon } from "./Icon.tsx";
+
 interface TransportProps {
   frame: number;
   totalFrames: number;
@@ -41,14 +43,15 @@ export const Transport: React.FC<TransportProps> = ({
     <div className="transport">
       <div className="transport-buttons">
         <button className="btn btn-primary" onClick={onToggle} title="播放 / 暂停（空格）">
-          {playing ? "⏸ 暂停" : "▶ 播放"}
+          <Icon name={playing ? "pause" : "play"} size={14} />{playing ? "暂停" : "播放"}
         </button>
         <button
-          className="btn btn-primary"
+          className="btn btn-ghost btn-icon"
+          aria-label="回到开头"
           onClick={() => onSeekFrame(0)}
           title="回到开头"
         >
-          ⏮
+          <Icon name="start" size={14} />
         </button>
         <button className="btn btn-ghost" onClick={() => onSeekFrame(Math.round(frame - fps))} title="后退 1 秒">
           −1s

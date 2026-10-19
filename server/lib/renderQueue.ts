@@ -173,6 +173,20 @@ class RenderQueue {
     return null;
   }
 
+  cancelPending(): void {
+    for (const job of this.jobs.values()) {
+      if (job.status === "running" || job.status === "queued") this.cancel(job.id);
+    }
+  }
+
+  async waitForIdle(timeoutMs = 5000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.running && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return this.running === null;
+  }
+
   private pump(): void {
     if (this.running || !this.callbacks) return;
     const job = this.nextQueued();

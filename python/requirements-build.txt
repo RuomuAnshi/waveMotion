@@ -1,0 +1,2 @@
+# Desktop analyzer build tool; runtime dependencies stay in requirements.txt.
+pyinstaller==6.22.3

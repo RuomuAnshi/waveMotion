@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** 项目根目录（server/lib -> ../../） */
-export const ROOT_DIR = path.resolve(__dirname, "../..");
+export const ROOT_DIR = process.env.WAVEMOTION_ROOT_DIR
+  ? path.resolve(process.env.WAVEMOTION_ROOT_DIR)
+  : path.resolve(__dirname, "../..");
 
 /** 运行时数据目录：分析缓存 / 导入素材 / 项目配置 / 成片，分开存放 */
 export const DATA_DIR = process.env.WAVEMOTION_DATA_DIR
@@ -17,8 +19,8 @@ export const IMPORTED_AUDIO_DIR = path.join(DATA_DIR, "audio");
 export const PROJECTS_DIR = path.join(DATA_DIR, "projects");
 export const RENDERS_DIR = path.join(DATA_DIR, "renders");
 export const TMP_DIR = path.join(DATA_DIR, "tmp");
-export const ASSETS_DIR = path.join(ROOT_DIR, "assets");
-export const WEB_DIST_DIR = path.join(ROOT_DIR, "dist", "web");
+export const ASSETS_DIR = process.env.WAVEMOTION_ASSETS_DIR || path.join(ROOT_DIR, "assets");
+export const WEB_DIST_DIR = process.env.WAVEMOTION_WEB_DIST || path.join(ROOT_DIR, "dist", "web");
 
 export const PYTHON_SCRIPT = path.join(ROOT_DIR, "python", "analyze.py");
 /** 隔离的 Python 环境（由 npm run setup:python 创建） */
@@ -52,6 +54,15 @@ export function resolvePython(): { bin: string; isolated: boolean } {
     }
   }
   return { bin: "python3", isolated: false };
+}
+
+/** Desktop builds ship a frozen analyzer; source checkouts retain Python support. */
+export function resolveAnalyzer(): { bin: string; args: string[]; isolated: boolean; bundled: boolean } {
+  if (process.env.WAVEMOTION_ANALYZER) {
+    return { bin: process.env.WAVEMOTION_ANALYZER, args: [], isolated: true, bundled: true };
+  }
+  const python = resolvePython();
+  return { ...python, args: [PYTHON_SCRIPT], bundled: false };
 }
 
 /** 同目录写入临时文件再 rename，避免读到半个 JSON */
