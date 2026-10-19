@@ -100,7 +100,7 @@ export const GeoTunnel: React.FC<{ scene: Scene }> = ({ scene }) => {
     );
   }
 
-  const coreR = unit * (0.035 + low * 0.02 + pulse * 0.016);
+  const coreR = unit * (0.022 + low * 0.012 + pulse * 0.01);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: palette.background, overflow: "hidden" }}>
@@ -125,9 +125,14 @@ export const GeoTunnel: React.FC<{ scene: Scene }> = ({ scene }) => {
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <radialGradient id="gt-halo">
+            <stop offset="0%" stopColor={withAlpha(palette.accent, 0.55)} />
+            <stop offset="45%" stopColor={withAlpha(palette.accent, 0.18)} />
+            <stop offset="100%" stopColor={withAlpha(palette.accent, 0)} />
+          </radialGradient>
           <radialGradient id="gt-core">
-            <stop offset="0%" stopColor={withAlpha(palette.accent, 0.88)} />
-            <stop offset="38%" stopColor={withAlpha(palette.secondary, 0.42)} />
+            <stop offset="0%" stopColor={withAlpha(palette.accent, 0.6)} />
+            <stop offset="30%" stopColor={withAlpha(palette.secondary, 0.4)} />
             <stop offset="100%" stopColor={withAlpha(palette.primary, 0)} />
           </radialGradient>
         </defs>
@@ -147,7 +152,7 @@ export const GeoTunnel: React.FC<{ scene: Scene }> = ({ scene }) => {
         </g>
         {/* 远端光源 */}
         <circle cx={cx} cy={cy} r={coreR * 5.2} fill="url(#gt-core)" opacity={clamp(0.45 + low * 0.45)} />
-        <circle cx={cx} cy={cy} r={coreR} fill={withAlpha(palette.accent, clamp(0.55 + pulse * 0.45))} />
+        <circle cx={cx} cy={cy} r={coreR * 3.2} fill="url(#gt-halo)" opacity={clamp(0.5 + pulse * 0.4)} />
         {pulse > 0.04 && (
           <circle
             cx={cx}
