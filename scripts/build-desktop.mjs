@@ -6,6 +6,7 @@ import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {build} from 'esbuild';
 import {bundle} from '@remotion/bundler';
+import {build as buildWeb} from 'vite';
 import {ensureBrowser} from '@remotion/renderer';
 
 const require=createRequire(import.meta.url);
@@ -38,7 +39,8 @@ async function prepareRuntime(){
   const browserSource=path.dirname(browserStatus.path);
   fs.cpSync(browserSource,path.join(runtime,'browser'),{recursive:true,force:true,filter:p=>!path.basename(p).startsWith('._')});
   const browser=path.join('browser',path.basename(browserStatus.path));
-  const compositorPackage=`@remotion/compositor-${process.platform}-${process.arch}`;
+  const suffix=process.platform==='win32'?'-msvc':process.platform==='linux'?'-gnu':'';
+  const compositorPackage=`@remotion/compositor-${process.platform}-${process.arch}${suffix}`;
   const compositor=path.dirname(require.resolve(`${compositorPackage}/package.json`));
   fs.cpSync(compositor,path.join(runtime,'compositor'),{recursive:true,force:true,filter:p=>!path.basename(p).startsWith('._')});
   fs.mkdirSync(path.join(runtime,'assets'),{recursive:true});demo(path.join(runtime,'assets','节拍演示.wav'));
@@ -55,7 +57,7 @@ async function prepareRuntime(){
   console.log(`Runtime ready: ${runtime}`);
 }
 export async function buildDesktop({withRuntime=true}={}){
-  run(process.platform==='win32'?'npm.cmd':'npm',['run','build']);
+  await buildWeb({configFile:path.join(root,'vite.config.ts')});
   await build({entryPoints:[path.join(root,'desktop/backend.ts')],outfile:path.join(root,'dist/desktop/backend.mjs'),bundle:true,packages:'external',platform:'node',format:'esm',target:'node24',sourcemap:true});
   await bundle({entryPoint:path.join(root,'src/remotion/root.tsx'),outDir:path.join(root,'dist/composition')});
   if(withRuntime)await prepareRuntime();

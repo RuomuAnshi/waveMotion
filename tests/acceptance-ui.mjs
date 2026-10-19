@@ -119,6 +119,19 @@ try {
     console.log(`${ok ? "✅" : "❌"} ${name}${detail !== "" ? "  " + detail : ""}`);
   };
 
+  // Inspector navigation must reveal the matching controls without losing edits.
+  await evaluate(`(() => { document.querySelector('#tab-rhythm').click(); return true; })()`);
+  check("节奏页签显示对应面板", await waitFor(`!document.querySelector('#panel-rhythm').hidden && document.querySelector('#panel-appearance').hidden`));
+  await evaluate(`(() => { document.querySelector('.header-export').click(); return true; })()`);
+  check("顶部导出入口显示导出面板", await waitFor(`!document.querySelector('#panel-export').hidden && document.querySelector('#tab-export').getAttribute('aria-selected') === 'true'`));
+  await evaluate(`(() => { document.querySelector('#tab-export').dispatchEvent(new KeyboardEvent('keydown', {key:'Home', bubbles:true})); return true; })()`);
+  check("检查器支持键盘切换并管理焦点", await waitFor(`!document.querySelector('#panel-appearance').hidden && document.activeElement.id === 'tab-appearance'`));
+
+  await send("Emulation.setDeviceMetricsOverride", {width:375, height:812, deviceScaleFactor:1, mobile:false});
+  await sleep(300);
+  check("375px 窗口无横向溢出", await evaluate(`document.documentElement.scrollWidth <= 375 && [...document.querySelectorAll('.stage,.sidebar-left,.sidebar-right')].every(el => el.getBoundingClientRect().width <= 375)`));
+  await send("Emulation.clearDeviceMetricsOverride");
+
   // Fresh page: Player does not exist on the initial render. Waiting for the
   // actual preview catches effects that subscribe only before its async mount.
   const previewReady = await waitFor(`!!document.querySelector(".preview-player-wrap")`, 60000);

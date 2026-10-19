@@ -8,7 +8,7 @@ const electron=await ensureElectronBinary(cache);
 const platform=process.platform==='darwin'?Platform.MAC:process.platform==='win32'?Platform.WINDOWS:Platform.LINUX;
 const channel=process.argv.includes('--release')?'':'-dev';
 const files=await build({targets:platform.createTarget(process.platform==='darwin'?['dmg','zip']:process.platform==='win32'?['nsis']:['AppImage']),publish:'never',config:{
-  appId:'moe.shelterhub.wavemotion',productName:'WaveMotion',asar:true,npmRebuild:false,
+  appId:'moe.shelterhub.wavemotion',productName:'WaveMotion',icon:path.join(root,'public/wavemotion-icon.png'),asar:true,npmRebuild:false,
   electronDist:electron.folder,
   directories:{app:root,output:path.join(cache,'release')},
   files:['desktop/*.cjs','dist/desktop/**','dist/web/**','package.json','LICENSE','!**/._*','!node_modules/.remotion/**','!node_modules/@remotion/compositor-*/**'],

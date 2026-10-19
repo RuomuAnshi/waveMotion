@@ -1,0 +1,7 @@
+# WaveMotion app icon
+
+Generated with the built-in ImageGen tool. Canonical asset: `public/wavemotion-icon.png` (transparent PNG). The same source is used by the web header/favicon and Electron; electron-builder converts it to the native macOS ICNS and Windows ICO formats.
+
+## Generation prompt
+
+Use case: logo-brand. Asset type: final desktop app icon for WaveMotion, a professional offline music-reactive motion graphics editor, matching a restrained Apple Pro + Linear graphite-and-violet UI. Create ONE production-ready square app icon, straight-on orthographic, no presentation mockup. A substantial dark graphite rounded-square tile with carefully rounded macOS-like corners, surrounded by genuine transparent space. Center a bold, beautifully simple sculptural waveform ribbon which hints at a W: two smooth wave crests and one central trough, broad rounded strokes, subtly dimensional frosted lavender glass with soft violet-to-lilac material shading. The mark is large, legible and recognizable at 32px. Tile nearly fills canvas with about 8% padding at edges; symbol occupies 60% of tile. Soft studio lighting, premium understated finish, crisp silhouette, extremely controlled reflections. No text, no letters printed, no borders, no extra objects, no music note, no equalizer bars, no excessive neon bloom or glows, no drop shadow outside tile. Transparent background outside the tile. Square 1024px or higher.

@@ -1,0 +1,62 @@
+name: Windows Desktop
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev, 'codex/**']
+  pull_request:
+    branches: [dev, main]
+permissions:
+  contents: read
+concurrency:
+  group: windows-desktop-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            python/requirements.txt
+            python/requirements-build.txt
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          python -m venv .venv
+          .venv/Scripts/python.exe -m pip install -r python/requirements.txt -r python/requirements-build.txt
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build self-contained Windows installer
+        run: npm run desktop:package
+      - name: Verify desktop backend and process lifecycle
+        run: npm run verify:desktop
+      - name: Verify bundled analyzer and media tools
+        shell: pwsh
+        run: |
+          $runtime = Join-Path $HOME '.cache/wavemotion/build/win32-x64/runtime'
+          & "$runtime/analyzer/wavemotion-analyzer.exe" --health
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled analyzer health failed' }
+          $env:WAVEMOTION_FFMPEG = "$runtime/ffmpeg/ffmpeg.exe"
+          $env:WAVEMOTION_FFPROBE = "$runtime/compositor/ffprobe.exe"
+          & "$runtime/analyzer/wavemotion-analyzer.exe" --input "$runtime/assets/节拍演示.wav" --output "$env:RUNNER_TEMP/desktop-analysis.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled audio analysis failed' }
+          & $env:WAVEMOTION_FFMPEG -version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled FFmpeg failed' }
+          & $env:WAVEMOTION_FFPROBE -version
+          if ($LASTEXITCODE -ne 0) { throw 'Bundled FFprobe failed' }
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: WaveMotion-windows-x64-dev-${{ github.run_number }}
+          path: desktop-release/*.exe
+          if-no-files-found: error
+          retention-days: 14
